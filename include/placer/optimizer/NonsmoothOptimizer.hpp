@@ -1,2 +1,5 @@
 #pragma once
-namespace placer { void NonsmoothOptimizerCompatibilitySymbol(); }
+#include "placer/Config.hpp"
+#include "placer/objective/Density.hpp"
+#include "placer/objective/Wirelength.hpp"
+namespace placer { struct HistoryRow{int global_iteration{},level{},stage{},iteration{}; double hpwl{},density_penalty{},ofr_penalty{},ofr_report{},max_density{}; int overflow_bins_penalty{},overflow_bins_report{}; double lambda{},beta_pr{},step{},gradient_rms{},total_norm{},elapsed_sec{};}; struct OptimizeConfig{WirelengthMode mode{WirelengthMode::PaperL1}; int iterations_per_stage{100},penalty_stages{4},nmax{1000000},level_index{}; bool density_only{false}; double lambda0{},density_gradient_ratio{1},lambda_growth_high{2.2},lambda_growth_mid{1.9},lambda_growth_low{1.6},s0{},s_floor{},step_decay{200},target_ofr{};}; struct OptimizeResult{double hpwl{},density_penalty{},ofr_penalty{},ofr_report{},max_density{},lambda{}; std::vector<HistoryRow> history;}; [[nodiscard]] OptimizeResult optimizeLevel(Level&, const Region&, const DensityGrid&, const OptimizeConfig&); }
