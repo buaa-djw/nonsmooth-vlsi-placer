@@ -41,6 +41,9 @@ int main(int argc, char **argv)
         std::vector<placer::HistoryRow> hist;
         std::vector<placer::OptimizeResult> sums;
         std::vector<placer::InterlevelHpwl> ih;
+        int adaptive_current = cfg.current;
+        int global_iteration_offset = 0;
+        double elapsed_offset = 0.0;
         for (int li = (int)levels.size() - 1; li >= 0; --li)
         {
             auto &lev = levels[(size_t)li];
@@ -49,10 +52,11 @@ int main(int argc, char **argv)
                 auto &coarse = levels[(size_t)li + 1];
                 (void)placer::decluster(lev, coarse, region);
                 ih.push_back(placer::interlevelHpwlConsistency(coarse, lev));
+                adaptive_current = std::min(2 * adaptive_current, std::max(1, (int)std::ceil(std::sqrt((double)lev.movableIds().size()))));
             }
             placer::projectLevel(lev, region);
-            int bx = cfg.bins_x.value_or(std::max(1, (int)std::sqrt(std::max<size_t>(1, lev.movableIds().size()))));
-            int by = cfg.bins_y.value_or(bx);
+            int bx = cfg.bins_x.value_or(adaptive_current);
+            int by = cfg.bins_y.value_or(adaptive_current);
             placer::DensityGrid dg(region, bx, by, cfg.penalty_density.value_or(cfg.target_density), cfg.ofr_density.value_or(cfg.target_density));
             placer::OptimizeConfig oc;
             oc.mode = cfg.wirelength_mode;
@@ -75,6 +79,8 @@ int main(int argc, char **argv)
             auto res = placer::optimizeLevel(lev, region, dg, oc);
             if (cfg.macro_shifting)
                 (void)placer::macroShifting(lev, region, cfg.macro_search_rings, cfg.macro_gap);
+            for (auto &row : res.history) { row.global_iteration += global_iteration_offset; row.elapsed_sec += elapsed_offset; }
+            if (!res.history.empty()) { global_iteration_offset = res.history.back().global_iteration + 1; elapsed_offset = res.history.back().elapsed_sec; }
             hist.insert(hist.end(), res.history.begin(), res.history.end());
             sums.push_back(res);
             placer::writeLevelPl((cfg.out / ("level_" + std::to_string(lev.index) + "_final.pl")).string(), lev);

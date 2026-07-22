@@ -178,6 +178,10 @@ namespace placer
             throw std::runtime_error("--hpwl-continuity-tol must be nonnegative");
         if (c.lambda_growth_low <= 0 || c.lambda_growth_mid <= 0 || c.lambda_growth_high <= 0)
             throw std::runtime_error("lambda growth factors must be positive");
+        if (!(0.0 < c.quadratic_damping && c.quadratic_damping <= 1.0))
+            throw std::runtime_error("--quadratic-damping must be in (0,1]");
+        if (!(0.0 < c.wsa_min_fraction && c.wsa_min_fraction < 0.5))
+            throw std::runtime_error("--wsa-min-fraction must be in (0,0.5)");
         return c;
     }
 }
