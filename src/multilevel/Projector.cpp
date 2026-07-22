@@ -13,10 +13,10 @@ namespace placer
         double left = -0.5 * o.width, right = 0.5 * o.width, bottom = -0.5 * o.height, top = 0.5 * o.height;
         if (o.projection_bbox)
         {
-            left = o.projection_bbox->xl;
-            right = o.projection_bbox->xh;
-            bottom = o.projection_bbox->yl;
-            top = o.projection_bbox->yh;
+            left = std::min(left, o.projection_bbox->xl);
+            right = std::max(right, o.projection_bbox->xh);
+            bottom = std::min(bottom, o.projection_bbox->yl);
+            top = std::max(top, o.projection_bbox->yh);
         }
         double lo_cx = r.xl - left, hi_cx = r.xh - right;
         double lo_cy = r.yl - bottom, hi_cy = r.yh - top;

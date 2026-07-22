@@ -15,6 +15,8 @@ namespace placer
         [[nodiscard]] DensityEval evaluate(const Level &) const;
         [[nodiscard]] int nx() const { return nx_; }
         [[nodiscard]] int ny() const { return ny_; }
+        [[nodiscard]] double binW() const { return bw_; }
+        [[nodiscard]] double binH() const { return bh_; }
 
     private:
         Region r_;

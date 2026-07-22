@@ -1,9 +1,12 @@
 #pragma once
+#include "placer/multilevel/Level.hpp"
 namespace placer
 {
     struct WhitespaceAllocationResult
     {
-        bool enabled{false};
+        size_t objects{};
+        size_t leaves{};
+        double rms_displacement{};
     };
-    [[nodiscard]] inline WhitespaceAllocationResult whitespaceAllocationCompatibility() { return {}; }
+    [[nodiscard]] WhitespaceAllocationResult allocateWhitespace(Level &level, const Region &region, double target_density, int leaf_size, double min_fraction);
 }
