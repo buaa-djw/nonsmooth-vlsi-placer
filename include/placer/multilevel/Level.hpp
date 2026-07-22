@@ -1,0 +1,5 @@
+#pragma once
+#include "placer/database/PlacementDB.hpp"
+#include <map>
+#include <optional>
+namespace placer { struct LObject{std::string name; double width{},height{},x{},y{}; bool fixed{},is_macro{}; std::vector<CellId> members; std::vector<size_t> children; std::map<size_t,std::pair<double,double>> child_offsets; std::optional<Region> projection_bbox; [[nodiscard]] double area()const{return width*height;} [[nodiscard]] double cx()const{return x+0.5*width;} [[nodiscard]] double cy()const{return y+0.5*height;} void setCenter(double a,double b){x=a-0.5*width;y=b-0.5*height;}}; struct LPin{size_t object_id{}; double offset_x{},offset_y{};}; struct LNet{std::string name; std::vector<LPin> pins;}; struct Level{int index{}; std::vector<LObject> objects; std::vector<LNet> nets; std::optional<std::vector<size_t>> fine_to_coarse; [[nodiscard]] std::vector<size_t> movableIds()const; [[nodiscard]] std::vector<size_t> standardMovableIds()const; [[nodiscard]] std::vector<size_t> macroIds()const;}; [[nodiscard]] Level buildLevel0(const PlacementDB&); }
