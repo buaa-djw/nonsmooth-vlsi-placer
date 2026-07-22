@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Generated results
+output/
+logs/
+results/
+*.log
+
+# Benchmark datasets
+testbench/ispd2005/
+
+# C++ and CMake
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+*.o
+*.a
+*.so
+*.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
