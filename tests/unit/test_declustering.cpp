@@ -1,6 +1,5 @@
 #include "placer/io/BookshelfReader.hpp"
-#include "placer/multilevel/Level.hpp"
-#include "placer/objective/Wirelength.hpp"
-#include <cassert>
-#include <cmath>
-int main(){ auto db=placer::loadBookshelf("tests/data/tiny/tiny_basic/tiny_basic.aux"); assert(db.cells.size()==3); assert(db.nets.size()==2); assert(db.pins.size()==5); auto r=db.region(); assert(std::fabs(r.xh-20.0)<1e-12); auto l=placer::buildLevel0(db); assert(l.objects.size()==3); assert(placer::exactHpwl(l)>=0.0); return 0; }
+#include "placer/multilevel/Clusterer.hpp"
+#include "placer/multilevel/Declusterer.hpp"
+#include "../TestSupport.hpp"
+int main(){ auto db=placer::loadBookshelf("tests/data/tiny/tiny_basic/tiny_basic.aux"); auto fine=placer::buildLevel0(db); auto coarse=placer::clusterOneLevel(fine,2,256); auto st=placer::decluster(fine,coarse,db.region()); CHECK(st.parents>=1u); CHECK(st.max_parent_shift>=0.0); return 0; }

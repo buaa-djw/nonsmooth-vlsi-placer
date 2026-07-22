@@ -1,6 +1,3 @@
-#include "placer/io/BookshelfReader.hpp"
-#include "placer/multilevel/Level.hpp"
-#include "placer/objective/Wirelength.hpp"
-#include <cassert>
-#include <cmath>
-int main(){ auto db=placer::loadBookshelf("tests/data/tiny/tiny_basic/tiny_basic.aux"); assert(db.cells.size()==3); assert(db.nets.size()==2); assert(db.pins.size()==5); auto r=db.region(); assert(std::fabs(r.xh-20.0)<1e-12); auto l=placer::buildLevel0(db); assert(l.objects.size()==3); assert(placer::exactHpwl(l)>=0.0); return 0; }
+#include "placer/postprocess/SpatialHash.hpp"
+#include "../TestSupport.hpp"
+int main(){ placer::SpatialHash h(10.0); placer::Rect r{0,0,10,10,1}; auto keys=h.keys(r); CHECK_EQ(keys.size(),1u); h.add(r); CHECK(h.collides({9,9,11,11,1},0.0)); CHECK(h.collides({9.5,5,10.5,6,2},0.0)); return 0; }

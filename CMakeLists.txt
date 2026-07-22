@@ -6,7 +6,7 @@ find_package(ZLIB REQUIRED)
 add_library(placer_lib
  src/Config.cpp src/database/PlacementDB.cpp src/io/TextInput.cpp src/io/BookshelfReader.cpp src/io/BookshelfWriter.cpp src/io/Reporter.cpp
  src/multilevel/Level.cpp src/multilevel/Projector.cpp src/multilevel/Clusterer.cpp src/multilevel/Declusterer.cpp
- src/objective/Wirelength.cpp src/objective/Density.cpp src/optimizer/QuadraticInitializer.cpp src/optimizer/NonsmoothOptimizer.cpp src/postprocess/SpatialHash.cpp src/postprocess/MacroShifter.cpp src/postprocess/WhitespaceAllocator.cpp)
+ src/objective/Wirelength.cpp src/objective/Density.cpp src/optimizer/QuadraticInitializer.cpp src/optimizer/NonsmoothOptimizer.cpp src/postprocess/SpatialHash.cpp src/postprocess/MacroShifter.cpp src/postprocess/WhitespaceAllocator.cpp src/util/PythonRandom.cpp)
 target_include_directories(placer_lib PUBLIC include)
 target_link_libraries(placer_lib PUBLIC ZLIB::ZLIB)
 target_compile_options(placer_lib PRIVATE $<$<CONFIG:Debug>:-Wall -Wextra -Wpedantic -Wconversion -Wshadow>)
