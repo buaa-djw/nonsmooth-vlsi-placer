@@ -19,17 +19,23 @@ int main(int argc, char **argv)
     try
     {
         auto cfg = placer::parseConfig(argc, argv);
+        std::filesystem::create_directories(cfg.out);
+        placer::writeRunInfoJson(cfg.out / "run_info.json", cfg, 0.0);
+        std::cout << "[load] " << cfg.aux.string() << std::endl;
         auto db = placer::loadBookshelf(cfg.aux.string());
         auto region = db.region();
         auto l0 = placer::buildLevel0(db);
+        size_t pin_count = 0; for (const auto &n : db.nets) pin_count += n.pin_ids.size();
+        std::cout << "[load] cells=" << db.cells.size() << " movable=" << l0.movableIds().size() << " fixed=" << (db.cells.size() - l0.movableIds().size()) << " nets=" << db.nets.size() << " pins=" << pin_count << " rows=" << db.rows.size() << std::endl;
+        std::cout << "[hierarchy] begin" << std::endl;
         placer::ClusterConfig cc{cfg.current, cfg.coarsen_ratio, cfg.max_levels, cfg.cluster_degree_cap};
         auto levels = placer::buildHierarchy(l0, cc);
-        std::filesystem::create_directories(cfg.out);
+        std::cout << "[hierarchy] levels=" << levels.size() << std::endl;
         placer::writeHierarchyJson(cfg.out / "hierarchy.json", levels);
         auto &coarsest = levels.back();
         placer::writeLevelPl((cfg.out / "coarsest_before_quadratic.pl").string(), coarsest);
         if (cfg.quadratic_init)
-            (void)placer::quadraticInitialize(coarsest, region, {cfg.quadratic_iterations, cfg.quadratic_damping, cfg.quadratic_anchor, cfg.quadratic_tolerance, cfg.seed});
+            { std::cout << "[quadratic] L" << coarsest.index << " movable=" << coarsest.movableIds().size() << " nets=" << coarsest.nets.size() << " iterations=" << cfg.quadratic_iterations << std::endl; (void)placer::quadraticInitialize(coarsest, region, {cfg.quadratic_iterations, cfg.quadratic_damping, cfg.quadratic_anchor, cfg.quadratic_tolerance, cfg.seed}); }
         placer::projectLevel(coarsest, region);
         placer::writeLevelPl((cfg.out / "coarsest_after_quadratic.pl").string(), coarsest);
         std::vector<placer::HistoryRow> hist;
@@ -64,6 +70,8 @@ int main(int argc, char **argv)
             oc.s_floor = cfg.s_floor;
             oc.step_decay = cfg.step_decay;
             oc.target_ofr = cfg.target_ofr;
+            oc.report_every = cfg.report_every;
+            std::cout << "[optimize] L" << lev.index << " movable=" << lev.movableIds().size() << " bins=" << bx << "x" << by << std::endl;
             auto res = placer::optimizeLevel(lev, region, dg, oc);
             if (cfg.macro_shifting)
                 (void)placer::macroShifting(lev, region, cfg.macro_search_rings, cfg.macro_gap);
@@ -77,6 +85,8 @@ int main(int argc, char **argv)
         placer::writeSummaryJson(cfg.out / "summary.json", sums, levels.front());
         double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         placer::writeRunInfoJson(cfg.out / "run_info.json", cfg, elapsed);
+        std::cout << "[done] " << (cfg.out / "final.pl").string() << std::endl;
+        std::cout << "[done] elapsed=" << elapsed << std::endl;
         return 0;
     }
     catch (const std::exception &e)
