@@ -1,4 +1,50 @@
 #include "placer/optimizer/QuadraticInitializer.hpp"
 #include "placer/multilevel/Projector.hpp"
 #include <cmath>
-namespace placer { QuadraticResult quadraticInitialize(Level&l,const Region&r,const QuadraticConfig&cfg){if(needsNullspaceSeed(l))seedGrid(l,r,cfg.seed); auto ids=l.movableIds(); QuadraticResult res; if(ids.empty())return res; double ccx=(r.xl+r.xh)/2, ccy=(r.yl+r.yh)/2; for(int it=0;it<cfg.iterations;++it){double ss=0; for(auto id:ids){auto&o=l.objects[id]; double tx=ccx,ty=ccy,w=cfg.anchor; for(auto&n:l.nets)for(auto&p:n.pins)if(p.object_id==id){for(auto&q:n.pins)if(q.object_id!=id){auto&oo=l.objects[q.object_id]; tx+=oo.cx()+q.offset_x-p.offset_x; ty+=oo.cy()+q.offset_y-p.offset_y; w+=1.0/std::max<size_t>(1,n.pins.size()-1);}} tx/=std::max(1.0,w); ty/=std::max(1.0,w); double nx=(1-cfg.damping)*o.cx()+cfg.damping*tx, ny=(1-cfg.damping)*o.cy()+cfg.damping*ty; double dx=nx-o.cx(),dy=ny-o.cy(); o.setCenter(nx,ny); projectObject(o,r); ss+=dx*dx+dy*dy;} res.iterations=it+1; res.rms=std::sqrt(ss/(2.0*ids.size())); if(res.rms<cfg.tolerance)break;} return res;} }
+namespace placer
+{
+    QuadraticResult quadraticInitialize(Level &l, const Region &r, const QuadraticConfig &cfg)
+    {
+        if (needsNullspaceSeed(l))
+            seedGrid(l, r, cfg.seed);
+        auto ids = l.movableIds();
+        QuadraticResult res;
+        if (ids.empty())
+            return res;
+        double ccx = (r.xl + r.xh) / 2, ccy = (r.yl + r.yh) / 2;
+        for (int it = 0; it < cfg.iterations; ++it)
+        {
+            double ss = 0;
+            for (auto id : ids)
+            {
+                auto &o = l.objects[id];
+                double tx = ccx, ty = ccy, w = cfg.anchor;
+                for (auto &n : l.nets)
+                    for (auto &p : n.pins)
+                        if (p.object_id == id)
+                        {
+                            for (auto &q : n.pins)
+                                if (q.object_id != id)
+                                {
+                                    auto &oo = l.objects[q.object_id];
+                                    tx += oo.cx() + q.offset_x - p.offset_x;
+                                    ty += oo.cy() + q.offset_y - p.offset_y;
+                                    w += 1.0 / std::max<size_t>(1, n.pins.size() - 1);
+                                }
+                        }
+                tx /= std::max(1.0, w);
+                ty /= std::max(1.0, w);
+                double nx = (1 - cfg.damping) * o.cx() + cfg.damping * tx, ny = (1 - cfg.damping) * o.cy() + cfg.damping * ty;
+                double dx = nx - o.cx(), dy = ny - o.cy();
+                o.setCenter(nx, ny);
+                projectObject(o, r);
+                ss += dx * dx + dy * dy;
+            }
+            res.iterations = it + 1;
+            res.rms = std::sqrt(ss / (2.0 * ids.size()));
+            if (res.rms < cfg.tolerance)
+                break;
+        }
+        return res;
+    }
+}

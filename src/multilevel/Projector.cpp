@@ -4,4 +4,71 @@
 #include <numeric>
 #include <random>
 #include <stdexcept>
-namespace placer { void projectObject(LObject&o,const Region&r){ if(o.fixed) return; double minx=r.xl,maxx=r.xh-o.width,miny=r.yl,maxy=r.yh-o.height; if(o.projection_bbox){minx=std::max(minx,r.xl-o.projection_bbox->xl); maxx=std::min(maxx,r.xh-o.projection_bbox->xh); miny=std::max(miny,r.yl-o.projection_bbox->yl); maxy=std::min(maxy,r.yh-o.projection_bbox->yh);} if(minx>maxx+EPS||miny>maxy+EPS) throw std::runtime_error("object cannot be projected into placement region: "+o.name); o.x=std::min(std::max(o.x,minx),maxx); o.y=std::min(std::max(o.y,miny),maxy);} void projectLevel(Level&l,const Region&r){for(auto&o:l.objects)projectObject(o,r);} bool needsNullspaceSeed(const Level&l){bool any=false; double x=0,y=0; for(auto&o:l.objects) if(!o.fixed){ if(!any){x=o.x;y=o.y;any=true;} else if(std::abs(o.x-x)>EPS||std::abs(o.y-y)>EPS) return false;} return any;} void seedGrid(Level&l,const Region&r,int seed){auto ids=l.movableIds(); if(ids.empty())return; size_t n=ids.size(); int nx=std::max(1,(int)std::ceil(std::sqrt((double)n*(r.xh-r.xl)/std::max(EPS,r.yh-r.yl)))); int ny=std::max(1,(int)std::ceil((double)n/(double)nx)); std::vector<std::pair<double,double>> pts; for(int j=0;j<ny;++j)for(int i=0;i<nx;++i){double x=r.xl+(i+0.5)*(r.xh-r.xl)/nx; double y=r.yl+(j+0.5)*(r.yh-r.yl)/ny; pts.push_back({x,y});} std::mt19937 gen((uint32_t)seed); std::shuffle(pts.begin(),pts.end(),gen); for(size_t k=0;k<n;++k){auto&o=l.objects[ids[k]]; o.setCenter(pts[k].first,pts[k].second); projectObject(o,r);} } }
+namespace placer
+{
+    void projectObject(LObject &o, const Region &r)
+    {
+        if (o.fixed)
+            return;
+        double minx = r.xl, maxx = r.xh - o.width, miny = r.yl, maxy = r.yh - o.height;
+        if (o.projection_bbox)
+        {
+            minx = std::max(minx, r.xl - o.projection_bbox->xl);
+            maxx = std::min(maxx, r.xh - o.projection_bbox->xh);
+            miny = std::max(miny, r.yl - o.projection_bbox->yl);
+            maxy = std::min(maxy, r.yh - o.projection_bbox->yh);
+        }
+        if (minx > maxx + EPS || miny > maxy + EPS)
+            throw std::runtime_error("object cannot be projected into placement region: " + o.name);
+        o.x = std::min(std::max(o.x, minx), maxx);
+        o.y = std::min(std::max(o.y, miny), maxy);
+    }
+    void projectLevel(Level &l, const Region &r)
+    {
+        for (auto &o : l.objects)
+            projectObject(o, r);
+    }
+    bool needsNullspaceSeed(const Level &l)
+    {
+        bool any = false;
+        double x = 0, y = 0;
+        for (auto &o : l.objects)
+            if (!o.fixed)
+            {
+                if (!any)
+                {
+                    x = o.x;
+                    y = o.y;
+                    any = true;
+                }
+                else if (std::abs(o.x - x) > EPS || std::abs(o.y - y) > EPS)
+                    return false;
+            }
+        return any;
+    }
+    void seedGrid(Level &l, const Region &r, int seed)
+    {
+        auto ids = l.movableIds();
+        if (ids.empty())
+            return;
+        size_t n = ids.size();
+        int nx = std::max(1, (int)std::ceil(std::sqrt((double)n * (r.xh - r.xl) / std::max(EPS, r.yh - r.yl))));
+        int ny = std::max(1, (int)std::ceil((double)n / (double)nx));
+        std::vector<std::pair<double, double>> pts;
+        for (int j = 0; j < ny; ++j)
+            for (int i = 0; i < nx; ++i)
+            {
+                double x = r.xl + (i + 0.5) * (r.xh - r.xl) / nx;
+                double y = r.yl + (j + 0.5) * (r.yh - r.yl) / ny;
+                pts.push_back({x, y});
+            }
+        std::mt19937 gen((uint32_t)seed);
+        std::shuffle(pts.begin(), pts.end(), gen);
+        for (size_t k = 0; k < n; ++k)
+        {
+            auto &o = l.objects[ids[k]];
+            o.setCenter(pts[k].first, pts[k].second);
+            projectObject(o, r);
+        }
+    }
+}
