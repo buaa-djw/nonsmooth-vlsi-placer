@@ -17,6 +17,7 @@ namespace placer
         int iterations_per_stage{100}, penalty_stages{4}, nmax{1000000}, level_index{};
         bool density_only{false};
         double lambda0{}, density_gradient_ratio{1}, lambda_growth_high{2.2}, lambda_growth_mid{1.9}, lambda_growth_low{1.6}, s0{}, s_floor{}, step_decay{200}, target_ofr{};
+        int report_every{10};
     };
     struct OptimizeResult
     {

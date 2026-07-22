@@ -10,18 +10,19 @@ namespace placer
     {
         if (o.fixed)
             return;
-        double minx = r.xl, maxx = r.xh - o.width, miny = r.yl, maxy = r.yh - o.height;
+        double left = -0.5 * o.width, right = 0.5 * o.width, bottom = -0.5 * o.height, top = 0.5 * o.height;
         if (o.projection_bbox)
         {
-            minx = std::max(minx, r.xl - o.projection_bbox->xl);
-            maxx = std::min(maxx, r.xh - o.projection_bbox->xh);
-            miny = std::max(miny, r.yl - o.projection_bbox->yl);
-            maxy = std::min(maxy, r.yh - o.projection_bbox->yh);
+            left = o.projection_bbox->xl;
+            right = o.projection_bbox->xh;
+            bottom = o.projection_bbox->yl;
+            top = o.projection_bbox->yh;
         }
-        if (minx > maxx + EPS || miny > maxy + EPS)
-            throw std::runtime_error("object cannot be projected into placement region: " + o.name);
-        o.x = std::min(std::max(o.x, minx), maxx);
-        o.y = std::min(std::max(o.y, miny), maxy);
+        double lo_cx = r.xl - left, hi_cx = r.xh - right;
+        double lo_cy = r.yl - bottom, hi_cy = r.yh - top;
+        if (lo_cx > hi_cx + EPS || lo_cy > hi_cy + EPS)
+            throw std::runtime_error("object/envelope does not fit in placement region: " + o.name);
+        o.setCenter(std::min(std::max(o.cx(), lo_cx), hi_cx), std::min(std::max(o.cy(), lo_cy), hi_cy));
     }
     void projectLevel(Level &l, const Region &r)
     {
