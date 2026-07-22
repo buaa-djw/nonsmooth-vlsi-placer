@@ -1,0 +1,21 @@
+{
+  "levels": [
+    {
+      "level": 0,
+      "bins": [
+        150,
+        150
+      ],
+      "optimization": {
+        "hpwl": 1.00839936042625,
+        "density_penalty": 0.1410488283295746,
+        "ofr_penalty": 0.5387770587598381,
+        "ofr_report": 0.5387770587598381,
+        "max_density": 3.000000000000006,
+        "lambda": 1.4041584943009442
+      },
+      "post_interlevel_hpwl": 1.00839936042625
+    }
+  ],
+  "interlevel_hpwl": []
+}

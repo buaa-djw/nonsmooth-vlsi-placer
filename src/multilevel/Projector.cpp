@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
-#include <random>
+#include "placer/util/PythonRandom.hpp"
 #include <stdexcept>
 namespace placer
 {
@@ -31,45 +31,43 @@ namespace placer
     }
     bool needsNullspaceSeed(const Level &l)
     {
-        bool any = false;
-        double x = 0, y = 0;
-        for (auto &o : l.objects)
-            if (!o.fixed)
-            {
-                if (!any)
-                {
-                    x = o.x;
-                    y = o.y;
-                    any = true;
-                }
-                else if (std::abs(o.x - x) > EPS || std::abs(o.y - y) > EPS)
-                    return false;
-            }
-        return any;
+        const std::vector<std::size_t> ids = l.movableIds();
+        if (ids.size() < 2) return false;
+        double xmin = l.objects[ids.front()].x;
+        double xmax = xmin;
+        double ymin = l.objects[ids.front()].y;
+        double ymax = ymin;
+        for (const std::size_t id : ids)
+        {
+            const LObject &object = l.objects[id];
+            xmin = std::min(xmin, object.x);
+            xmax = std::max(xmax, object.x);
+            ymin = std::min(ymin, object.y);
+            ymax = std::max(ymax, object.y);
+        }
+        const double span = (xmax - xmin) + (ymax - ymin);
+        return span <= 1.0e-9;
     }
     void seedGrid(Level &l, const Region &r, int seed)
     {
-        auto ids = l.movableIds();
-        if (ids.empty())
-            return;
-        size_t n = ids.size();
-        int nx = std::max(1, (int)std::ceil(std::sqrt((double)n * (r.xh - r.xl) / std::max(EPS, r.yh - r.yl))));
-        int ny = std::max(1, (int)std::ceil((double)n / (double)nx));
-        std::vector<std::pair<double, double>> pts;
-        for (int j = 0; j < ny; ++j)
-            for (int i = 0; i < nx; ++i)
-            {
-                double x = r.xl + (i + 0.5) * (r.xh - r.xl) / nx;
-                double y = r.yl + (j + 0.5) * (r.yh - r.yl) / ny;
-                pts.push_back({x, y});
-            }
-        std::mt19937 gen((uint32_t)seed);
-        std::shuffle(pts.begin(), pts.end(), gen);
-        for (size_t k = 0; k < n; ++k)
+        std::vector<std::size_t> order = l.movableIds();
+        if (order.empty()) return;
+        const std::size_t count = order.size();
+        const double width = std::max(r.xh - r.xl, EPS);
+        const double height = std::max(r.yh - r.yl, EPS);
+        const int nx = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count) * width / height))));
+        const int ny = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / static_cast<double>(nx))));
+        PythonRandom rng(static_cast<std::uint64_t>(seed));
+        rng.shuffle(order);
+        for (std::size_t k = 0; k < order.size(); ++k)
         {
-            auto &o = l.objects[ids[k]];
-            o.setCenter(pts[k].first, pts[k].second);
-            projectObject(o, r);
+            const int ix = static_cast<int>(k % static_cast<std::size_t>(nx));
+            const int iy = static_cast<int>(k / static_cast<std::size_t>(nx));
+            const double cx = r.xl + (static_cast<double>(ix) + 0.5) * (r.xh - r.xl) / static_cast<double>(nx);
+            const double cy = r.yl + (static_cast<double>(iy) + 0.5) * (r.yh - r.yl) / static_cast<double>(ny);
+            LObject &object = l.objects[order[k]];
+            object.setCenter(cx, cy);
+            projectObject(object, r);
         }
     }
 }

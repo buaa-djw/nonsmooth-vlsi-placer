@@ -2,6 +2,7 @@
 #include "placer/Config.hpp"
 #include "placer/objective/Density.hpp"
 #include "placer/objective/Wirelength.hpp"
+#include <chrono>
 namespace placer
 {
     struct HistoryRow
@@ -19,10 +20,15 @@ namespace placer
         double lambda0{}, density_gradient_ratio{1}, lambda_growth_high{2.2}, lambda_growth_mid{1.9}, lambda_growth_low{1.6}, s0{}, s_floor{}, step_decay{200}, target_ofr{};
         int report_every{10};
     };
+    struct GlobalOptimizeState
+    {
+        int iteration{};
+        std::chrono::steady_clock::time_point start_time{};
+    };
     struct OptimizeResult
     {
         double hpwl{}, density_penalty{}, ofr_penalty{}, ofr_report{}, max_density{}, lambda{};
         std::vector<HistoryRow> history;
     };
-    [[nodiscard]] OptimizeResult optimizeLevel(Level &, const Region &, const DensityGrid &, const OptimizeConfig &);
+    [[nodiscard]] OptimizeResult optimizeLevel(Level &, const Region &, const DensityGrid &, const OptimizeConfig &, GlobalOptimizeState &);
 }

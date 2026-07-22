@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <sstream>
+#include <optional>
 namespace placer
 {
     namespace
@@ -49,6 +50,7 @@ namespace placer
     Config parseConfig(int argc, char **argv)
     {
         Config c;
+        std::optional<int> compatibility_iterations;
         if (argc <= 1)
             throw std::runtime_error("missing aux");
         for (int i = 1; i < argc; ++i)
@@ -103,7 +105,9 @@ namespace placer
                 c.quadratic_anchor = tod(need(i, argc, argv, a), a);
             else if (a == "--quadratic-tolerance")
                 c.quadratic_tolerance = tod(need(i, argc, argv, a), a);
-            else if (a == "--iterations" || a == "--iterations-per-stage")
+            else if (a == "--iterations")
+                compatibility_iterations = toi(need(i, argc, argv, a), a);
+            else if (a == "--iterations-per-stage")
                 c.iterations_per_stage = toi(need(i, argc, argv, a), a);
             else if (a == "--penalty-stages")
                 c.penalty_stages = toi(need(i, argc, argv, a), a);
@@ -160,6 +164,7 @@ namespace placer
             else
                 throw std::runtime_error("unexpected positional argument " + a);
         }
+        if (compatibility_iterations.has_value()) c.iterations_per_stage = *compatibility_iterations;
         if (c.aux.empty())
             throw std::runtime_error("missing aux");
         if (!(0.0 < c.target_density && c.target_density <= 1.0))

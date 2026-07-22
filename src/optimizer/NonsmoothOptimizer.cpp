@@ -9,11 +9,10 @@ namespace placer
 {
     static double rmsIds(const std::vector<double>&x,const std::vector<double>&y,const std::vector<size_t>&ids){ double s=0; for(auto i:ids) s+=x[i]*x[i]+y[i]*y[i]; return ids.empty()?0:std::sqrt(s/(2.0*ids.size())); }
     static double dotIds(const std::vector<double>&ax,const std::vector<double>&ay,const std::vector<double>&bx,const std::vector<double>&by,const std::vector<size_t>&ids){ double s=0; for(auto i:ids) s+=ax[i]*bx[i]+ay[i]*by[i]; return s; }
-    OptimizeResult optimizeLevel(Level &l, const Region &r, const DensityGrid &dg, const OptimizeConfig &cfg)
+    OptimizeResult optimizeLevel(Level &l, const Region &r, const DensityGrid &dg, const OptimizeConfig &cfg, GlobalOptimizeState &global_state)
     {
         OptimizeResult out;
         auto ids = l.movableIds();
-        auto t0 = std::chrono::steady_clock::now();
         if (ids.empty()) return out;
         auto we = wirelengthSubgradient(l, cfg.mode);
         auto de = dg.evaluate(l);
@@ -60,9 +59,9 @@ namespace placer
                 if (dotIds(gx,gy,dirx,diry,ids) >= 0.0) { beta=0.0; for(auto i:ids){dirx[i]=-gx[i]; diry[i]=-gy[i];} }
                 double direction_rms = rmsIds(dirx,diry,ids);
                 double step = std::max(default_floor, default_s0 / (1.0 + level_iteration / std::max(cfg.step_decay, 1.0)));
-                HistoryRow row; row.global_iteration=(int)out.history.size(); row.level=cfg.level_index; row.stage=st; row.iteration=it; row.hpwl=we.hpwl; row.density_penalty=de.penalty; row.ofr_penalty=de.ofr_penalty; row.ofr_report=de.ofr_report; row.max_density=de.max_density; row.overflow_bins_penalty=de.overflow_bins_penalty; row.overflow_bins_report=de.overflow_bins_report; row.lambda=out.lambda; row.beta_pr=beta; row.step=step; row.gradient_rms=rmsIds(gx,gy,ids); row.total_norm=total_norm; row.elapsed_sec=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count(); out.history.push_back(row);
+                HistoryRow row; row.global_iteration=global_state.iteration; row.level=cfg.level_index; row.stage=st; row.iteration=it; row.hpwl=we.hpwl; row.density_penalty=de.penalty; row.ofr_penalty=de.ofr_penalty; row.ofr_report=de.ofr_report; row.max_density=de.max_density; row.overflow_bins_penalty=de.overflow_bins_penalty; row.overflow_bins_report=de.overflow_bins_report; row.lambda=out.lambda; row.beta_pr=beta; row.step=step; row.gradient_rms=rmsIds(gx,gy,ids); row.total_norm=total_norm; row.elapsed_sec=std::chrono::duration<double>(std::chrono::steady_clock::now()-global_state.start_time).count(); out.history.push_back(row);
                 if(cfg.report_every>0 && row.global_iteration%cfg.report_every==0) std::cout<<"[L"<<cfg.level_index<<" S"<<st<<" I"<<it<<"] HPWL="<<row.hpwl<<" Pden="<<row.density_penalty<<" OFR="<<row.ofr_report<<" maxD="<<row.max_density<<" lambda="<<row.lambda<<" step="<<row.step<<std::endl;
-                ++level_iteration;
+                ++global_state.iteration; ++level_iteration;
                 if ((cfg.nmax > 0 && stall >= cfg.nmax) || direction_rms <= EPS || (de.ofr_report <= cfg.target_ofr && st == cfg.penalty_stages - 1)) { stop_all = true; break; }
                 for (auto i:ids) { l.objects[i].x += step*dirx[i]/direction_rms; l.objects[i].y += step*diry[i]/direction_rms; }
                 projectLevel(l,r); pgx=gx; pgy=gy; pdx=dirx; pdy=diry;

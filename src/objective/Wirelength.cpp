@@ -1,6 +1,7 @@
 #include "placer/objective/Wirelength.hpp"
 #include <algorithm>
 #include <cmath>
+#include <set>
 namespace placer
 {
     static double sx(double v) { return (v > EPS) - (v < -EPS); }
@@ -82,34 +83,27 @@ namespace placer
                     ymin = std::min(ymin, y);
                     ymax = std::max(ymax, y);
                 }
-                int nminx = 0, nmaxx = 0, nminy = 0, nmaxy = 0;
+                const double xtol = 1.0e-10 * std::max({1.0, std::abs(xmin), std::abs(xmax)});
+                const double ytol = 1.0e-10 * std::max({1.0, std::abs(ymin), std::abs(ymax)});
+                std::set<std::size_t> xlow, xhigh, ylow, yhigh;
                 for (auto &p : n.pins)
                 {
                     auto &o = l.objects[p.object_id];
                     double x = o.cx() + p.offset_x, y = o.cy() + p.offset_y;
-                    if (std::abs(x - xmin) <= EPS)
-                        ++nminx;
-                    if (std::abs(x - xmax) <= EPS)
-                        ++nmaxx;
-                    if (std::abs(y - ymin) <= EPS)
-                        ++nminy;
-                    if (std::abs(y - ymax) <= EPS)
-                        ++nmaxy;
+                    if (std::abs(x - xmin) <= xtol) xlow.insert(p.object_id);
+                    if (std::abs(x - xmax) <= xtol) xhigh.insert(p.object_id);
+                    if (std::abs(y - ymin) <= ytol) ylow.insert(p.object_id);
+                    if (std::abs(y - ymax) <= ytol) yhigh.insert(p.object_id);
                 }
-                for (auto &p : n.pins)
+                if (xmax > xmin + EPS)
                 {
-                    auto &o = l.objects[p.object_id];
-                    if (o.fixed)
-                        continue;
-                    double x = o.cx() + p.offset_x, y = o.cy() + p.offset_y;
-                    if (std::abs(x - xmin) <= EPS)
-                        e.gx[p.object_id] -= 1.0 / nminx;
-                    if (std::abs(x - xmax) <= EPS)
-                        e.gx[p.object_id] += 1.0 / nmaxx;
-                    if (std::abs(y - ymin) <= EPS)
-                        e.gy[p.object_id] -= 1.0 / nminy;
-                    if (std::abs(y - ymax) <= EPS)
-                        e.gy[p.object_id] += 1.0 / nmaxy;
+                    for (auto id : xhigh) if (!l.objects[id].fixed) e.gx[id] += 1.0 / static_cast<double>(xhigh.size());
+                    for (auto id : xlow) if (!l.objects[id].fixed) e.gx[id] -= 1.0 / static_cast<double>(xlow.size());
+                }
+                if (ymax > ymin + EPS)
+                {
+                    for (auto id : yhigh) if (!l.objects[id].fixed) e.gy[id] += 1.0 / static_cast<double>(yhigh.size());
+                    for (auto id : ylow) if (!l.objects[id].fixed) e.gy[id] -= 1.0 / static_cast<double>(ylow.size());
                 }
             }
         }

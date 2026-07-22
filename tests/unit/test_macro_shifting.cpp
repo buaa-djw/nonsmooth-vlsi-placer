@@ -1,6 +1,4 @@
 #include "placer/io/BookshelfReader.hpp"
-#include "placer/multilevel/Level.hpp"
-#include "placer/objective/Wirelength.hpp"
-#include <cassert>
-#include <cmath>
-int main(){ auto db=placer::loadBookshelf("tests/data/tiny/tiny_basic/tiny_basic.aux"); assert(db.cells.size()==3); assert(db.nets.size()==2); assert(db.pins.size()==5); auto r=db.region(); assert(std::fabs(r.xh-20.0)<1e-12); auto l=placer::buildLevel0(db); assert(l.objects.size()==3); assert(placer::exactHpwl(l)>=0.0); return 0; }
+#include "placer/postprocess/MacroShifter.hpp"
+#include "../TestSupport.hpp"
+int main(){ auto db=placer::loadBookshelf("tests/data/tiny/tiny_basic/tiny_basic.aux"); auto l=placer::buildLevel0(db); auto st=placer::macroShifting(l,db.region(),1.0,1,0.0); CHECK_EQ(st.failed,0u); CHECK(st.total_displacement>=0.0); return 0; }
