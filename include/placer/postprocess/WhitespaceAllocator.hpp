@@ -1,2 +1,2 @@
 #pragma once
-namespace placer { void WhitespaceAllocatorCompatibilitySymbol(); }
+namespace placer { struct WhitespaceAllocationResult{bool enabled{false};}; [[nodiscard]] inline WhitespaceAllocationResult whitespaceAllocationCompatibility(){return {};}}
