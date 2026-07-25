@@ -67,7 +67,7 @@ namespace placer
             else if (a == "--wirelength-mode")
             {
                 auto v = need(i, argc, argv, a);
-                if (v == "paper_l1")
+                if (v == "paper_l1" || v == "paper_b2b")
                     c.wirelength_mode = WirelengthMode::PaperL1;
                 else if (v == "b2b")
                     c.wirelength_mode = WirelengthMode::B2B;
@@ -127,6 +127,9 @@ namespace placer
                 c.lambda_growth_mid = tod(need(i, argc, argv, a), a);
             else if (a == "--lambda-growth-low")
                 c.lambda_growth_low = tod(need(i, argc, argv, a), a);
+            else if (a == "--delta1") c.lambda_growth_low = tod(need(i, argc, argv, a), a);
+            else if (a == "--delta2") c.lambda_growth_mid = tod(need(i, argc, argv, a), a);
+            else if (a == "--delta3") c.lambda_growth_high = tod(need(i, argc, argv, a), a);
             else if (a == "--s0")
                 c.s0 = tod(need(i, argc, argv, a), a);
             else if (a == "--s-floor")
@@ -137,8 +140,10 @@ namespace placer
                 c.target_ofr = tod(need(i, argc, argv, a), a);
             else if (a == "--report-every")
                 c.report_every = toi(need(i, argc, argv, a), a);
-            else if (a == "--nmax")
-                c.nmax = toi(need(i, argc, argv, a), a);
+            else if (a == "--nmax") {
+                const auto value=need(i, argc, argv, a);
+                c.nmax=value=="paper"?0:toi(value,a);
+            }
             else if (a == "--hpwl-continuity-tol")
                 c.hpwl_continuity_tol = tod(need(i, argc, argv, a), a);
             else if (a == "--macro-shifting")

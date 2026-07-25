@@ -7,7 +7,7 @@ namespace placer
     {
         std::ofstream f(p);
         f << "UCLA pl 1.0\n"
-          << std::fixed << std::setprecision(6);
+          << std::fixed << std::setprecision(12);
         for (auto &o : l.objects)
             f << o.name << '\t' << o.x << '\t' << o.y << "\t: N" << (o.fixed ? " /FIXED" : "") << '\n';
     }
@@ -21,7 +21,7 @@ namespace placer
             }
         std::ofstream f(p);
         f << "UCLA pl 1.0\n"
-          << std::fixed << std::setprecision(6);
+          << std::fixed << std::setprecision(12);
         for (auto &c : db.cells)
             f << c.name << '\t' << c.x << '\t' << c.y << "\t: " << c.orientation << (c.fixed ? " /FIXED" : "") << '\n';
     }

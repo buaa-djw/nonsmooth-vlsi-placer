@@ -47,9 +47,12 @@ namespace placer
             auto &c = db.cells[i];
             l.objects.push_back({c.name, c.width, c.height, c.x, c.y, c.fixed, !c.fixed && c.height > 1.5 * row + EPS, {i}, {}, {}, std::nullopt});
         }
-        for (auto &n : db.nets)
+        for (size_t net_id=0;net_id<db.nets.size();++net_id)
         {
+            const auto &n=db.nets[net_id];
             LNet ln{n.name, {}};
+            ln.original_net_id=net_id;
+            ln.original_net_name=n.name;
             for (auto pid : n.pin_ids)
             {
                 auto &p = db.pins[pid];
