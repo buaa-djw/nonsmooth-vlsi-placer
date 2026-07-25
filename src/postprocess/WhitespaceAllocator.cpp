@@ -57,7 +57,7 @@ namespace placer
         if(!(min_fraction>0.0 && min_fraction<0.5)) throw std::runtime_error("--wsa-min-fraction must be in (0,0.5)");
         auto macros=level.macroIds(); std::set<size_t> locked(macros.begin(),macros.end()); std::vector<size_t> ids; for(auto id:level.movableIds()) if(!locked.count(id)) ids.push_back(id);
         if(ids.size()<2) return {ids.size(),0,0.0}; std::vector<std::pair<double,double>> before; for(auto id:ids) before.push_back({level.objects[id].cx(),level.objects[id].cy()});
-        auto root=buildSliceTree(level,ids,region,leaf_size); std::vector<Region> fixed; for(const auto &o:level.objects) if(o.fixed || (!o.fixed && o.is_macro)) fixed.push_back({o.x,o.x+o.width,o.y,o.y+o.height}); computeDemand(*root,level,fixed,target_density); allocateSlice(*root,level,region,min_fraction); projectLevel(level,region);
+        auto root=buildSliceTree(level,ids,region,leaf_size); std::vector<Region> fixed; for(const auto &o:level.objects) if(o.fixed || (!o.fixed && o.is_macro)) fixed.push_back({o.x,o.x+o.width,o.y,o.y+o.height}); computeDemand(*root,level,fixed,target_density); allocateSlice(*root,level,region,min_fraction); (void)projectLevel(level,region);
         double move2=0; for(size_t k=0;k<ids.size();++k){ auto &o=level.objects[ids[k]]; move2+=(o.cx()-before[k].first)*(o.cx()-before[k].first)+(o.cy()-before[k].second)*(o.cy()-before[k].second); }
         return {ids.size(), countLeaves(*root), std::sqrt(move2/std::max<size_t>(1,2*ids.size()))};
     }
