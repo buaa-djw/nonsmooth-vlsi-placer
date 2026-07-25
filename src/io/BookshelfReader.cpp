@@ -1,0 +1,215 @@
+#include "placer/io/BookshelfReader.hpp"
+#include "placer/io/TextInput.hpp"
+#include <filesystem>
+#include <sstream>
+#include <stdexcept>
+namespace fs = std::filesystem;
+namespace placer
+{
+    static bool ends(std::string s, std::string e)
+    {
+        for (auto &c : s)
+            c = char(tolower(c));
+        return s.size() >= e.size() && s.substr(s.size() - e.size()) == e;
+    }
+    static std::string res(const fs::path &a, std::string tok)
+    {
+        if (tok.size() && tok.front() == '\"')
+            tok = tok.substr(1, tok.size() - 2);
+        for (char &c : tok)
+            if (c == '\\')
+                c = '/';
+        fs::path p = fs::absolute(a.parent_path() / tok);
+        if (fs::exists(p))
+            return p.string();
+        if (ends(p.string(), ".pl") && fs::exists(p.string() + ".gz"))
+            return p.string() + ".gz";
+        return p.string();
+    }
+    std::map<std::string, std::string> parseAux(const std::string &aux)
+    {
+        auto text = readTextFile(aux);
+        std::istringstream is(text);
+        std::map<std::string, std::string> r;
+        std::string tok;
+        while (is >> tok)
+        {
+            auto l = tok;
+            for (auto &c : l)
+                c = char(tolower(c));
+            for (auto e : {".nodes", ".nets", ".pl", ".scl"})
+                if (ends(l, e) || ends(l, std::string(e) + ".gz"))
+                    r[e] = res(aux, tok);
+        }
+        for (auto e : {".nodes", ".nets", ".pl", ".scl"})
+        {
+            if (!r.count(e))
+                throw std::runtime_error(aux + ": missing references");
+            if (!fs::exists(r[e]))
+                throw std::runtime_error(std::string(e) + " file not found: " + r[e]);
+        }
+        return r;
+    }
+    void parseNodes(const std::string &p, PlacementDB &db)
+    {
+        std::istringstream in(readTextFile(p));
+        std::string line;
+        while (getline(in, line))
+        {
+            auto t = tokens(line);
+            if (t.size() < 3 || t[0] == "UCLA" || t[0] == "NumNodes" || t[0] == "NumTerminals")
+                continue;
+            try
+            {
+                bool term = false;
+                for (size_t i = 3; i < t.size(); ++i)
+                {
+                    auto s = t[i];
+                    for (auto &c : s)
+                        c = char(tolower(c));
+                    if (s.find("terminal") != std::string::npos)
+                        term = true;
+                }
+                db.addCell(t[0], stod(t[1]), stod(t[2]), term);
+            }
+            catch (const std::invalid_argument &)
+            {
+            }
+        }
+    }
+    void parsePl(const std::string &p, PlacementDB &db)
+    {
+        std::istringstream in(readTextFile(p));
+        std::string line;
+        while (getline(in, line))
+        {
+            auto t = tokens(line);
+            if (t.size() < 3 || t[0] == "UCLA")
+                continue;
+            auto it = db.cell_name_to_id.find(t[0]);
+            if (it == db.cell_name_to_id.end())
+                continue;
+            try
+            {
+                auto &c = db.cells[it->second];
+                c.x = stod(t[1]);
+                c.y = stod(t[2]);
+                for (size_t i = 0; i + 1 < t.size(); ++i)
+                    if (t[i] == ":" && t[i + 1].rfind('/', 0) != 0)
+                        c.orientation = t[i + 1];
+                bool fx = c.terminal;
+                for (auto &s : t)
+                    if (s.find("/FIXED") != std::string::npos || s.find("/fixed") != std::string::npos)
+                        fx = true;
+                c.fixed = fx;
+            }
+            catch (const std::invalid_argument &)
+            {
+            }
+        }
+    }
+    void parseScl(const std::string &p, PlacementDB &db)
+    {
+        std::istringstream in(readTextFile(p));
+        std::string line;
+        bool inrow = false;
+        std::map<std::string, double> cur;
+        auto flush = [&]()
+        {
+        if(!inrow)  return; 
+        double y=cur["Coordinate"],h=cur.count("Height")?cur["Height"]:1,x0=cur["SubrowOrigin"],n=cur["NumSites"],sw=cur.count("Sitewidth")?cur["Sitewidth"]:1,ss=cur.count("Sitespacing")?cur["Sitespacing"]:sw; 
+        db.rows.push_back({y,h,x0,x0+n*ss,sw,ss,(int)n}); 
+        cur.clear(); 
+        inrow=false; 
+    };
+        while (getline(in, line))
+        {
+            auto t = tokens(line);
+            if (t.empty())
+                continue;
+            if (t[0] == "CoreRow")
+            {
+                flush();
+                inrow = true;
+                continue;
+            }
+            if (t[0] == "End")
+            {
+                flush();
+                continue;
+            }
+            if (!inrow)
+                continue;
+            if (t.size() >= 3 && t[1] == ":")
+            {
+                try
+                {
+                    cur[t[0]] = stod(t[2]);
+                }
+                catch (const std::invalid_argument &)
+                {
+                }
+            }
+            for (size_t i = 0; i < t.size(); ++i)
+                if (t[i] == "SubrowOrigin" || t[i] == "NumSites")
+                {
+                    size_t j = i + 1;
+                    if (j < t.size() && t[j] == ":")
+                        ++j;
+                    if (j < t.size())
+                        cur[t[i]] = stod(t[j]);
+                }
+        }
+        flush();
+    }
+    void parseNets(const std::string &p, PlacementDB &db)
+    {
+        std::istringstream in(readTextFile(p));
+        std::string line;
+        while (getline(in, line))
+        {
+            auto t = tokens(line);
+            if (t.empty() || t[0] != "NetDegree")
+                continue;
+            size_t k = 0;
+            while (k < t.size() && t[k] != ":")
+                ++k;
+            if (k + 1 >= t.size())
+                continue;
+            int deg = stoi(t[k + 1]);
+            std::string name = k + 2 < t.size() ? t[k + 2] : "net_" + std::to_string(db.nets.size());
+            auto nid = db.addNet(name);
+            for (int r = 0; r < deg;)
+            {
+                if (!getline(in, line))
+                    throw std::runtime_error("premature EOF in net " + name);
+                auto q = tokens(line);
+                if (q.empty())
+                    continue;
+                auto it = db.cell_name_to_id.find(q[0]);
+                if (it == db.cell_name_to_id.end())
+                    throw std::runtime_error("unknown cell " + q[0] + " in net " + name);
+                double ox = 0, oy = 0;
+                std::string dir = q.size() > 1 ? q[1] : "";
+                for (size_t i = 0; i + 2 < q.size(); ++i)
+                    if (q[i] == ":")
+                    {
+                        ox = stod(q[i + 1]);
+                        oy = stod(q[i + 2]);
+                    }
+                db.addPin(it->second, nid, ox, oy, dir);
+                ++r;
+            }
+        }
+    }
+    PlacementDB loadBookshelf(const std::string &aux)
+    {
+        auto f = parseAux(aux);
+        PlacementDB db;
+        parseNodes(f[".nodes"], db);
+        parsePl(f[".pl"], db);
+        parseScl(f[".scl"], db);
+        parseNets(f[".nets"], db);
+        return db;
+    }
+}
