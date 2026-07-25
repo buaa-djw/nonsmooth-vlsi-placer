@@ -10,9 +10,9 @@ namespace placer
     DensityEval DensityGrid::evaluate(const Level &l) const
     { int nbin=nx_*ny_; std::vector<double> mov(nbin,0), fix(nbin,0); struct St{int b; double dx,dy;}; std::vector<std::vector<St>> st(l.objects.size()); double mov_area=0, binarea=bw_*bh_;
       for(size_t oid=0;oid<l.objects.size();++oid){ const auto&o=l.objects[oid]; int ix0,ix1,iy0,iy1; bounds(r_,bw_,bh_,nx_,ny_,o.x,o.y,o.width,o.height,ix0,ix1,iy0,iy1); for(int iy=iy0;iy<=iy1;++iy){ double by0=r_.yl+iy*bh_, by1=by0+bh_; auto [oy,doy]=overlapDeriv(o.y,o.height,by0,by1); if(oy<=0) continue; for(int ix=ix0;ix<=ix1;++ix){ double bx0=r_.xl+ix*bw_, bx1=bx0+bw_; auto [ox,dox]=overlapDeriv(o.x,o.width,bx0,bx1); if(ox<=0) continue; int b=iy*nx_+ix; if(o.fixed) fix[b]+=ox*oy; else { mov[b]+=ox*oy; st[oid].push_back({b,dox*oy,doy*ox}); } }} if(!o.fixed) mov_area+=o.area(); }
-      std::vector<double> capP(nbin),capR(nbin),coeff(nbin); double norm2=EPS, raw2=0, rawP=0, rawR=0; DensityEval e; e.gx.assign(l.objects.size(),0); e.gy.assign(l.objects.size(),0);
-      for(int b=0;b<nbin;++b){ capP[b]=std::max(EPS,pd_*binarea-fix[b]); capR[b]=std::max(EPS,rd_*binarea-fix[b]); norm2+=capP[b]*capP[b]; }
-      for(int b=0;b<nbin;++b){ double op=std::max(0.0,mov[b]-capP[b]), orp=std::max(0.0,mov[b]-capR[b]); if(op>EPS) ++e.overflow_bins_penalty; if(orp>EPS) ++e.overflow_bins_report; raw2+=op*op; rawP+=op; rawR+=orp; coeff[b]=2.0*op/norm2; e.max_density=std::max(e.max_density,(mov[b]+fix[b])/std::max(binarea,EPS)); }
+      std::vector<double> capP(nbin),capR(nbin),coeff(nbin); double raw2=0, rawP=0, rawR=0; DensityEval e; e.gx.assign(l.objects.size(),0); e.gy.assign(l.objects.size(),0);
+      for(int b=0;b<nbin;++b){ capP[b]=std::max(EPS,pd_*binarea-fix[b]); capR[b]=std::max(EPS,rd_*binarea-fix[b]); }
+      for(int b=0;b<nbin;++b){ double op=std::max(0.0,mov[b]-capP[b]), orp=std::max(0.0,mov[b]-capR[b]); if(op>EPS) ++e.overflow_bins_penalty; if(orp>EPS) ++e.overflow_bins_report; raw2+=op*op; rawP+=op; rawR+=orp; coeff[b]=2.0*op; e.max_density=std::max(e.max_density,(mov[b]+fix[b])/std::max(binarea,EPS)); }
       for(auto oid:l.movableIds()) for(const auto&s:st[oid]){ e.gx[oid]+=coeff[s.b]*s.dx; e.gy[oid]+=coeff[s.b]*s.dy; }
-      e.penalty=raw2/norm2; e.ofr_penalty=rawP/std::max(mov_area,EPS); e.ofr_report=rawR/std::max(mov_area,EPS); return e; }
+      e.penalty=raw2; e.ofr_penalty=rawP/std::max(mov_area,EPS); e.ofr_report=rawR/std::max(mov_area,EPS); return e; }
 }

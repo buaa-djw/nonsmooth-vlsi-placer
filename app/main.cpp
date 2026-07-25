@@ -73,13 +73,6 @@ int main(int argc, char **argv)
             oc.level_index = lev.index;
             oc.density_only = cfg.density_only;
             oc.lambda0 = cfg.lambda0;
-            oc.density_gradient_ratio = cfg.density_gradient_ratio;
-            oc.lambda_growth_high = cfg.lambda_growth_high;
-            oc.lambda_growth_mid = cfg.lambda_growth_mid;
-            oc.lambda_growth_low = cfg.lambda_growth_low;
-            oc.s0 = cfg.s0;
-            oc.s_floor = cfg.s_floor;
-            oc.step_decay = cfg.step_decay;
             oc.target_ofr = cfg.target_ofr;
             oc.report_every = cfg.report_every;
             std::cout << "[optimize] L" << lev.index << " movable=" << lev.movableIds().size() << " bins=" << bx << "x" << by << std::endl;
@@ -93,7 +86,7 @@ int main(int argc, char **argv)
         placer::writeFinalPl((cfg.out / "final.pl").string(), db, levels.front());
         placer::writeHistoryCsv(cfg.out / "history.csv", hist);
         placer::writeInterlevelJson(cfg.out / "interlevel_hpwl.json", ih);
-        placer::writeSummaryJson(cfg.out / "summary.json", sums, levels.front());
+        placer::writeSummaryJson(cfg.out / "summary.json", sums, levels.front(), db, cfg);
         double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         placer::writeRunInfoJson(cfg.out / "run_info.json", cfg, elapsed);
         std::cout << "[done] " << (cfg.out / "final.pl").string() << std::endl;
