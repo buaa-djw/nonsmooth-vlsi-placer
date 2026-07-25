@@ -1,74 +1,58 @@
 #include "placer/optimizer/NonsmoothOptimizer.hpp"
 #include "placer/multilevel/Projector.hpp"
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
 namespace placer
 {
-    static double rmsIds(const std::vector<double>&x,const std::vector<double>&y,const std::vector<size_t>&ids){ double s=0; for(auto i:ids) s+=x[i]*x[i]+y[i]*y[i]; return ids.empty()?0:std::sqrt(s/(2.0*ids.size())); }
-    static double dotIds(const std::vector<double>&ax,const std::vector<double>&ay,const std::vector<double>&bx,const std::vector<double>&by,const std::vector<size_t>&ids){ double s=0; for(auto i:ids) s+=ax[i]*bx[i]+ay[i]*by[i]; return s; }
-    OptimizeResult optimizeLevel(Level &l, const Region &r, const DensityGrid &dg, const OptimizeConfig &cfg, GlobalOptimizeState &global_state)
-    {
-        OptimizeResult out;
-        auto ids = l.movableIds();
-        if (ids.empty()) return out;
-        auto we = wirelengthSubgradient(l, cfg.mode);
-        auto de = dg.evaluate(l);
-        const double wire_scale = std::max(std::abs(we.hpwl), 1.0);
-        const double density_scale = std::max(std::abs(de.penalty), 1.0e-8);
-        std::vector<double> wg(we.gx.size()), wh(we.gy.size()), dgx(de.gx.size()), dgy(de.gy.size());
-        for (size_t i=0;i<we.gx.size();++i) { wg[i]=we.gx[i]/wire_scale; wh[i]=we.gy[i]/wire_scale; dgx[i]=de.gx[i]/density_scale; dgy[i]=de.gy[i]/density_scale; }
-        double wr = rmsIds(wg, wh, ids), dr = rmsIds(dgx, dgy, ids);
-        out.lambda = cfg.density_only ? 1.0 : (cfg.lambda0 > 0 ? cfg.lambda0 : ((dr <= EPS || de.penalty <= EPS) ? 1.0 : std::min(1.0e8, std::max(1.0e-8, cfg.density_gradient_ratio * wr / dr))));
-        std::vector<double> gx(l.objects.size()), gy(l.objects.size()), pgx, pgy, dirx(l.objects.size()), diry(l.objects.size()), pdx, pdy;
-        std::vector<double> bestx(l.objects.size()), besty(l.objects.size());
-        for (size_t i=0;i<l.objects.size();++i) { bestx[i]=l.objects[i].x; besty[i]=l.objects[i].y; }
-        std::pair<double,double> bestKey{std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
-        double bestTotal = std::numeric_limits<double>::infinity();
-        int stall = 0, level_iteration = 0;
-        double previous_stage_ofr = std::numeric_limits<double>::quiet_NaN();
-        bool stop_all = false;
-        const double default_s0 = cfg.s0 > 0.0 ? cfg.s0 : 0.25 * std::min(dg.binW(), dg.binH());
-        const double default_floor = cfg.s_floor > 0.0 ? cfg.s_floor : 1.0e-3 * std::min(dg.binW(), dg.binH());
-        for (int st=0; st<cfg.penalty_stages; ++st)
-        {
-            if (st > 0)
-            {
-                double current_ofr = de.ofr_report;
-                double factor = current_ofr < 0.04 ? cfg.lambda_growth_low : ((!std::isnan(previous_stage_ofr) && current_ofr <= 0.5 * previous_stage_ofr) ? cfg.lambda_growth_mid : cfg.lambda_growth_high);
-                if (!std::isnan(previous_stage_ofr) && current_ofr >= previous_stage_ofr * (1.0 - 1.0e-4)) break;
-                out.lambda *= factor;
-                pgx.clear(); pgy.clear(); pdx.clear(); pdy.clear(); bestTotal = std::numeric_limits<double>::infinity(); stall = 0;
-            }
-            previous_stage_ofr = de.ofr_report;
-            for (int it=0; it<cfg.iterations_per_stage; ++it)
-            {
-                we = wirelengthSubgradient(l, cfg.mode); de = dg.evaluate(l);
-                double total_norm = (cfg.density_only ? 0.0 : we.hpwl / wire_scale) + out.lambda * de.penalty / density_scale;
-                auto key = std::make_pair(de.ofr_report, we.hpwl);
-                if (key < bestKey) { bestKey = key; for (auto i:ids) { bestx[i]=l.objects[i].x; besty[i]=l.objects[i].y; } }
-                double improve_tol = std::isfinite(bestTotal) ? 1.0e-12 * std::max(1.0, std::abs(bestTotal)) : 0.0;
-                if (!std::isfinite(bestTotal) || total_norm < bestTotal - improve_tol) { bestTotal = total_norm; stall = 0; } else ++stall;
-                for (size_t i=0;i<l.objects.size();++i) { gx[i]=0.0; gy[i]=0.0; }
-                for (auto i:ids) { gx[i] = cfg.density_only ? de.gx[i]/density_scale : we.gx[i]/wire_scale + out.lambda*de.gx[i]/density_scale; gy[i] = cfg.density_only ? de.gy[i]/density_scale : we.gy[i]/wire_scale + out.lambda*de.gy[i]/density_scale; }
-                double beta = 0.0;
-                if (!pgx.empty()) { double num=0; for(auto i:ids) num += gx[i]*(gx[i]-pgx[i]) + gy[i]*(gy[i]-pgy[i]); beta = std::max(0.0, num / std::max(EPS, dotIds(pgx,pgy,pgx,pgy,ids))); }
-                for (auto i:ids) { dirx[i] = -gx[i] + (!pdx.empty()?beta*pdx[i]:0.0); diry[i] = -gy[i] + (!pdy.empty()?beta*pdy[i]:0.0); }
-                if (dotIds(gx,gy,dirx,diry,ids) >= 0.0) { beta=0.0; for(auto i:ids){dirx[i]=-gx[i]; diry[i]=-gy[i];} }
-                double direction_rms = rmsIds(dirx,diry,ids);
-                double step = std::max(default_floor, default_s0 / (1.0 + level_iteration / std::max(cfg.step_decay, 1.0)));
-                HistoryRow row; row.global_iteration=global_state.iteration; row.level=cfg.level_index; row.stage=st; row.iteration=it; row.hpwl=we.hpwl; row.density_penalty=de.penalty; row.ofr_penalty=de.ofr_penalty; row.ofr_report=de.ofr_report; row.max_density=de.max_density; row.overflow_bins_penalty=de.overflow_bins_penalty; row.overflow_bins_report=de.overflow_bins_report; row.lambda=out.lambda; row.beta_pr=beta; row.step=step; row.gradient_rms=rmsIds(gx,gy,ids); row.total_norm=total_norm; row.elapsed_sec=std::chrono::duration<double>(std::chrono::steady_clock::now()-global_state.start_time).count(); out.history.push_back(row);
-                if(cfg.report_every>0 && row.global_iteration%cfg.report_every==0) std::cout<<"[L"<<cfg.level_index<<" S"<<st<<" I"<<it<<"] HPWL="<<row.hpwl<<" Pden="<<row.density_penalty<<" OFR="<<row.ofr_report<<" maxD="<<row.max_density<<" lambda="<<row.lambda<<" step="<<row.step<<std::endl;
-                ++global_state.iteration; ++level_iteration;
-                if ((cfg.nmax > 0 && stall >= cfg.nmax) || direction_rms <= EPS || (de.ofr_report <= cfg.target_ofr && st == cfg.penalty_stages - 1)) { stop_all = true; break; }
-                for (auto i:ids) { l.objects[i].x += step*dirx[i]/direction_rms; l.objects[i].y += step*diry[i]/direction_rms; }
-                projectLevel(l,r); pgx=gx; pgy=gy; pdx=dirx; pdy=diry;
-            }
-            if (stop_all) break;
+namespace {
+double l1(const std::vector<double>&x,const std::vector<double>&y,const std::vector<size_t>&ids){double v=0;for(auto i:ids)v+=std::abs(x[i])+std::abs(y[i]);return v;}
+double l2(const std::vector<double>&x,const std::vector<double>&y,const std::vector<size_t>&ids){double v=0;for(auto i:ids)v+=x[i]*x[i]+y[i]*y[i];return std::sqrt(v);}
+double dot(const std::vector<double>&ax,const std::vector<double>&ay,const std::vector<double>&bx,const std::vector<double>&by,const std::vector<size_t>&ids){double v=0;for(auto i:ids)v+=ax[i]*bx[i]+ay[i]*by[i];return v;}
+void capture(const Level&l,const std::vector<size_t>&ids,std::vector<double>&x,std::vector<double>&y){x.resize(ids.size());y.resize(ids.size());for(size_t k=0;k<ids.size();++k){x[k]=l.objects[ids[k]].x;y[k]=l.objects[ids[k]].y;}}
+void restore(Level&l,const std::vector<size_t>&ids,const std::vector<double>&x,const std::vector<double>&y){for(size_t k=0;k<ids.size();++k){l.objects[ids[k]].x=x[k];l.objects[ids[k]].y=y[k];}}
+bool improved(double oldv,double newv){return newv<oldv-1e-12*std::max(1.0,std::abs(oldv));}
+}
+double paperStepScale(int iteration){return std::max(0.2*std::pow(2.0/3.0,static_cast<double>(iteration/100)),0.06);}
+double paperInitialLambda(double w,double d){if(!std::isfinite(w)||!std::isfinite(d)||d<=0.0)throw std::runtime_error("initial layout has no valid density gradient (density gradient L1 is zero)");double v=w/d;if(!std::isfinite(v))throw std::runtime_error("non-finite initial lambda");return v;}
+double polakRibiereBeta(const std::vector<double>&g,const std::vector<double>&p){if(g.size()!=p.size())throw std::invalid_argument("gradient size mismatch");double n=0,d=0;for(size_t i=0;i<g.size();++i){n+=g[i]*(g[i]-p[i]);d+=p[i]*p[i];}return d<=EPS?0.0:n/d;}
+double nextPaperLambda(double lambda,double current,double previous,bool has_previous){double f=current<0.04?1.6:(has_previous&&current<0.5*previous?1.9:2.2);return lambda*f;}
+int paperNoImprovementLimit(size_t n){return std::max(1,std::min(static_cast<int>(std::ceil(0.001*static_cast<double>(n))),100));}
+
+OptimizeResult optimizeLevel(Level &l,const Region&r,const DensityGrid&grid,const OptimizeConfig&cfg,GlobalOptimizeState&gs)
+{
+    OptimizeResult out; const auto ids=l.movableIds(); if(ids.empty())return out;
+    auto w=wirelengthSubgradient(l,cfg.mode); auto d=grid.evaluate(l);
+    out.initial_hpwl=w.hpwl;out.initial_density_penalty=d.penalty;out.initial_ofr=d.ofr_report;
+    out.wire_gradient_l1=l1(w.gx,w.gy,ids);out.density_gradient_l1=l1(d.gx,d.gy,ids);
+    out.lambda=cfg.lambda0>0?cfg.lambda0:paperInitialLambda(out.wire_gradient_l1,out.density_gradient_l1);out.initial_lambda=out.lambda;
+    std::vector<double> accepted_x,accepted_y;capture(l,ids,accepted_x,accepted_y);double accepted_ofr=d.ofr_report;bool have_accepted=false;
+    const int stall_limit=cfg.nmax>0?cfg.nmax:paperNoImprovementLimit(ids.size());
+    for(int stage=0;stage<cfg.penalty_stages;++stage){
+        if(stage>0)out.lambda=nextPaperLambda(out.lambda,accepted_ofr,stage>1?out.stages[out.stages.size()-2].ofr:0.0,stage>1);
+        w=wirelengthSubgradient(l,cfg.mode);d=grid.evaluate(l);
+        double best=w.hpwl+out.lambda*d.penalty;int best_it=-1,stall=0;std::vector<double> bx,by;capture(l,ids,bx,by);
+        std::vector<double> pgx,pgy,pdx,pdy,gx(l.objects.size()),gy(l.objects.size()),dx(l.objects.size()),dy(l.objects.size());
+        StageResult sr;sr.stage=stage;sr.lambda=out.lambda;sr.stop_reason="safety_iteration_limit";
+        for(int it=0;it<cfg.iterations_per_stage;++it){
+            w=wirelengthSubgradient(l,cfg.mode);d=grid.evaluate(l);
+            const double objective=w.hpwl+out.lambda*d.penalty;
+            bool isbest=improved(best,objective);if(isbest){best=objective;best_it=it;capture(l,ids,bx,by);stall=0;}else ++stall;
+            for(auto i:ids){gx[i]=w.gx[i]+out.lambda*d.gx[i];gy[i]=w.gy[i]+out.lambda*d.gy[i];}
+            double beta=0;bool zero_prev=false;if(!pgx.empty()){double den=dot(pgx,pgy,pgx,pgy,ids);if(den<=EPS)zero_prev=true;else{double num=0;for(auto i:ids)num+=gx[i]*(gx[i]-pgx[i])+gy[i]*(gy[i]-pgy[i]);beta=num/den;}}
+            for(auto i:ids){dx[i]=-gx[i]+(pdx.empty()?0.0:beta*pdx[i]);dy[i]=-gy[i]+(pdy.empty()?0.0:beta*pdy[i]);}
+            double dn=l2(dx,dy,ids),scale=paperStepScale(it),alpha=dn>0?scale*grid.binW()/dn:0;
+            HistoryRow row;row.global_iteration=gs.iteration++;row.level=cfg.level_index;row.stage=stage;row.iteration=it;row.lambda=out.lambda;row.raw_hpwl=w.hpwl;row.raw_density_penalty=d.penalty;row.raw_objective=objective;row.ofr=d.ofr_report;row.wire_gradient_l1=l1(w.gx,w.gy,ids);row.density_gradient_l1=l1(d.gx,d.gy,ids);row.weighted_density_gradient_l1=out.lambda*row.density_gradient_l1;row.total_gradient_l1=l1(gx,gy,ids);row.total_gradient_l2=l2(gx,gy,ids);row.beta_pr=beta;row.direction_norm=dn;row.s=scale;row.bin_width=grid.binW();row.alpha=alpha;row.displacement_norm=alpha*dn;row.overflow_bin_count=d.overflow_bins_report;row.total_overflow=d.ofr_report;row.max_bin_utilization=d.max_density;row.stage_best_objective=best;row.stage_best_iteration=best_it;row.is_stage_best=isbest;row.no_improve_count=stall;row.restart_due_to_zero_previous_norm=zero_prev;row.elapsed_sec=std::chrono::duration<double>(std::chrono::steady_clock::now()-gs.start_time).count();out.history.push_back(row);
+            sr.iterations=it+1;if(cfg.report_every>0&&row.global_iteration%cfg.report_every==0)std::cout<<"[L"<<cfg.level_index<<" S"<<stage<<" I"<<it<<"] HPWL="<<w.hpwl<<" P="<<d.penalty<<" OFR="<<d.ofr_report<<" lambda="<<out.lambda<<" s="<<scale<<std::endl;
+            if(!std::isfinite(objective)||!std::isfinite(dn)){sr.stop_reason="numeric_error";break;}if(dn<=EPS){sr.stop_reason="zero_direction";break;}if(stall>=stall_limit){sr.stop_reason="no_objective_improvement";break;}
+            for(auto i:ids){l.objects[i].x+=alpha*dx[i];l.objects[i].y+=alpha*dy[i];}projectLevel(l,r);pgx=gx;pgy=gy;pdx=dx;pdy=dy;
         }
-        for (auto i:ids) { l.objects[i].x=bestx[i]; l.objects[i].y=besty[i]; }
-        auto fe=dg.evaluate(l); out.hpwl=exactHpwl(l); out.density_penalty=fe.penalty; out.ofr_penalty=fe.ofr_penalty; out.ofr_report=fe.ofr_report; out.max_density=fe.max_density; return out;
+        restore(l,ids,bx,by);w=wirelengthSubgradient(l,cfg.mode);d=grid.evaluate(l);sr.best_iteration=best_it;sr.hpwl=w.hpwl;sr.density_penalty=d.penalty;sr.objective=w.hpwl+out.lambda*d.penalty;sr.ofr=d.ofr_report;out.stages.push_back(sr);out.stop_reason=sr.stop_reason;
+        if(stage>0&&!improved(accepted_ofr,sr.ofr)){restore(l,ids,accepted_x,accepted_y);out.stop_reason="ofr_not_improved";break;}
+        accepted_ofr=sr.ofr;capture(l,ids,accepted_x,accepted_y);have_accepted=true;if(sr.ofr<=cfg.target_ofr)break;
     }
+    if(have_accepted)restore(l,ids,accepted_x,accepted_y);w=wirelengthSubgradient(l,cfg.mode);d=grid.evaluate(l);out.hpwl=w.hpwl;out.density_penalty=d.penalty;out.ofr_report=d.ofr_report;return out;
+}
 }

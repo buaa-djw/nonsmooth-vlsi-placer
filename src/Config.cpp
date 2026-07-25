@@ -46,7 +46,7 @@ namespace placer
     }
     std::string toString(WirelengthMode m) { return m == WirelengthMode::PaperL1 ? "paper_l1" : m == WirelengthMode::B2B ? "b2b"
                                                                                                                          : "extrema"; }
-    std::string helpText() { return "Usage: nonsmooth_placer AUX [options]\n--out DIR --wirelength-mode paper_l1|b2b|extrema --target-density V --penalty-density V --ofr-density V --bins NX NY --current N --coarsen-ratio V --max-levels N --cluster-degree-cap N --quadratic-init --no-quadratic-init --quadratic-iterations N --quadratic-damping V --quadratic-anchor V --quadratic-tolerance V --iterations N --iterations-per-stage N --penalty-stages N --density-only --no-density-only --lambda0 V --density-gradient-ratio V --lambda-growth-high V --lambda-growth-mid V --lambda-growth-low V --s0 V --s-floor V --step-decay V --target-ofr V --report-every N --nmax N --hpwl-continuity-tol V --macro-shifting --no-macro-shifting --macro-search-rings N --macro-gap V --whitespace-allocation --no-whitespace-allocation --wsa-leaf-size N --wsa-min-fraction V --seed N\n"; }
+    std::string helpText() { return "Usage: nonsmooth_placer AUX [options]\n--out DIR --expected-benchmark NAME --target-density V --iterations-per-stage N --penalty-stages N\n"; }
     Config parseConfig(int argc, char **argv)
     {
         Config c;
@@ -62,6 +62,8 @@ namespace placer
             }
             else if (a == "--out")
                 c.out = need(i, argc, argv, a);
+            else if (a == "--expected-benchmark")
+                c.expected_benchmark = need(i, argc, argv, a);
             else if (a == "--wirelength-mode")
             {
                 auto v = need(i, argc, argv, a);
@@ -167,6 +169,8 @@ namespace placer
         if (compatibility_iterations.has_value()) c.iterations_per_stage = *compatibility_iterations;
         if (c.aux.empty())
             throw std::runtime_error("missing aux");
+        if (c.expected_benchmark && c.aux.stem().string() != *c.expected_benchmark)
+            throw std::runtime_error("expected benchmark '" + *c.expected_benchmark + "' but aux identifies '" + c.aux.stem().string() + "'");
         if (!(0.0 < c.target_density && c.target_density <= 1.0))
             throw std::runtime_error("--target-density must be in (0,1]");
         if (c.penalty_density && !(0.0 < *c.penalty_density && *c.penalty_density <= 1.0))

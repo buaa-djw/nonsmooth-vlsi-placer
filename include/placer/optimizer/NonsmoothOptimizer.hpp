@@ -3,32 +3,51 @@
 #include "placer/objective/Density.hpp"
 #include "placer/objective/Wirelength.hpp"
 #include <chrono>
+#include <string>
 namespace placer
 {
     struct HistoryRow
     {
         int global_iteration{}, level{}, stage{}, iteration{};
-        double hpwl{}, density_penalty{}, ofr_penalty{}, ofr_report{}, max_density{};
-        int overflow_bins_penalty{}, overflow_bins_report{};
-        double lambda{}, beta_pr{}, step{}, gradient_rms{}, total_norm{}, elapsed_sec{};
+        double lambda{}, raw_hpwl{}, raw_density_penalty{}, raw_objective{}, ofr{};
+        double wire_gradient_l1{}, density_gradient_l1{}, weighted_density_gradient_l1{};
+        double total_gradient_l1{}, total_gradient_l2{}, beta_pr{}, direction_norm{};
+        double s{}, bin_width{}, alpha{}, displacement_norm{};
+        int overflow_bin_count{};
+        double total_overflow{}, max_bin_overflow{}, max_bin_utilization{};
+        double stage_best_objective{};
+        int stage_best_iteration{}, no_improve_count{}, projection_count{};
+        bool is_stage_best{}, restart_due_to_zero_previous_norm{};
+        double elapsed_sec{};
+    };
+    struct StageResult
+    {
+        int stage{}, iterations{}, best_iteration{};
+        double lambda{}, hpwl{}, density_penalty{}, objective{}, ofr{};
+        std::string stop_reason;
     };
     struct OptimizeConfig
     {
         WirelengthMode mode{WirelengthMode::PaperL1};
-        int iterations_per_stage{100}, penalty_stages{4}, nmax{1000000}, level_index{};
+        int iterations_per_stage{10000}, penalty_stages{20}, nmax{0}, level_index{};
         bool density_only{false};
-        double lambda0{}, density_gradient_ratio{1}, lambda_growth_high{2.2}, lambda_growth_mid{1.9}, lambda_growth_low{1.6}, s0{}, s_floor{}, step_decay{200}, target_ofr{};
+        double lambda0{}, target_ofr{};
         int report_every{10};
     };
-    struct GlobalOptimizeState
-    {
-        int iteration{};
-        std::chrono::steady_clock::time_point start_time{};
-    };
+    struct GlobalOptimizeState { int iteration{}; std::chrono::steady_clock::time_point start_time{}; };
     struct OptimizeResult
     {
-        double hpwl{}, density_penalty{}, ofr_penalty{}, ofr_report{}, max_density{}, lambda{};
+        double initial_hpwl{}, initial_density_penalty{}, initial_ofr{};
+        double hpwl{}, density_penalty{}, ofr_report{}, lambda{};
+        double wire_gradient_l1{}, density_gradient_l1{}, initial_lambda{};
+        std::string stop_reason;
+        std::vector<StageResult> stages;
         std::vector<HistoryRow> history;
     };
+    [[nodiscard]] double paperStepScale(int iteration);
+    [[nodiscard]] double paperInitialLambda(double wire_gradient_l1, double density_gradient_l1);
+    [[nodiscard]] double polakRibiereBeta(const std::vector<double>& g, const std::vector<double>& previous);
+    [[nodiscard]] double nextPaperLambda(double lambda, double current_ofr, double previous_ofr, bool has_previous);
+    [[nodiscard]] int paperNoImprovementLimit(size_t movable_count);
     [[nodiscard]] OptimizeResult optimizeLevel(Level &, const Region &, const DensityGrid &, const OptimizeConfig &, GlobalOptimizeState &);
 }

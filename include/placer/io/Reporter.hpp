@@ -11,6 +11,6 @@ namespace placer
     void writeHistoryCsv(const std::filesystem::path &, const std::vector<HistoryRow> &);
     void writeHierarchyJson(const std::filesystem::path &, const std::vector<Level> &);
     void writeInterlevelJson(const std::filesystem::path &, const std::vector<InterlevelHpwl> &);
-    void writeSummaryJson(const std::filesystem::path &, const std::vector<OptimizeResult> &, const Level &);
+    void writeSummaryJson(const std::filesystem::path &, const std::vector<OptimizeResult> &, const Level &, const PlacementDB &, const Config &);
     void writeRunInfoJson(const std::filesystem::path &, const Config &, double elapsed);
 }

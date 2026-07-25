@@ -13,6 +13,7 @@ namespace placer
     struct Config
     {
         std::filesystem::path aux;
+        std::optional<std::string> expected_benchmark;
         std::filesystem::path out{"output/nonsmooth_single"};
         WirelengthMode wirelength_mode{WirelengthMode::PaperL1};
         double target_density{1.0};
@@ -29,8 +30,8 @@ namespace placer
         double quadratic_damping{0.75};
         double quadratic_anchor{1.0e-4};
         double quadratic_tolerance{1.0e-3};
-        int iterations_per_stage{100};
-        int penalty_stages{4};
+        int iterations_per_stage{10000};
+        int penalty_stages{20};
         bool density_only{false};
         double lambda0{0.0};
         double density_gradient_ratio{1.0};
@@ -42,7 +43,7 @@ namespace placer
         double step_decay{200.0};
         double target_ofr{0.0};
         int report_every{10};
-        int nmax{1000000};
+        int nmax{0};
         double hpwl_continuity_tol{1.0e-8};
         bool macro_shifting{true};
         int macro_search_rings{30};
