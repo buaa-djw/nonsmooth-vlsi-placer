@@ -7,19 +7,15 @@
 #include <stdexcept>
 namespace placer
 {
-namespace {
-double l1(const std::vector<double>&x,const std::vector<double>&y,const std::vector<size_t>&ids){double v=0;for(auto i:ids)v+=std::abs(x[i])+std::abs(y[i]);return v;}
-double l2(const std::vector<double>&x,const std::vector<double>&y,const std::vector<size_t>&ids){double v=0;for(auto i:ids)v+=x[i]*x[i]+y[i]*y[i];return std::sqrt(v);}
-double dot(const std::vector<double>&ax,const std::vector<double>&ay,const std::vector<double>&bx,const std::vector<double>&by,const std::vector<size_t>&ids){double v=0;for(auto i:ids)v+=ax[i]*bx[i]+ay[i]*by[i];return v;}
-void capture(const Level&l,const std::vector<size_t>&ids,std::vector<double>&x,std::vector<double>&y){x.resize(ids.size());y.resize(ids.size());for(size_t k=0;k<ids.size();++k){x[k]=l.objects[ids[k]].x;y[k]=l.objects[ids[k]].y;}}
-void restore(Level&l,const std::vector<size_t>&ids,const std::vector<double>&x,const std::vector<double>&y){for(size_t k=0;k<ids.size();++k){l.objects[ids[k]].x=x[k];l.objects[ids[k]].y=y[k];}}
-bool improved(double oldv,double newv){return newv<oldv-1e-12*std::max(1.0,std::abs(oldv));}
-}
-double paperStepScale(int iteration){return std::max(0.2*std::pow(2.0/3.0,static_cast<double>(iteration/100)),0.06);}
-double paperInitialLambda(double w,double d){if(!std::isfinite(w)||!std::isfinite(d)||d<=0.0)throw std::runtime_error("initial layout has no valid density gradient (density gradient L1 is zero)");double v=w/d;if(!std::isfinite(v))throw std::runtime_error("non-finite initial lambda");return v;}
-double polakRibiereBeta(const std::vector<double>&g,const std::vector<double>&p){if(g.size()!=p.size())throw std::invalid_argument("gradient size mismatch");double n=0,d=0;for(size_t i=0;i<g.size();++i){n+=g[i]*(g[i]-p[i]);d+=p[i]*p[i];}return d<=EPS?0.0:n/d;}
-double nextPaperLambda(double lambda,double current,double previous,bool has_previous){double f=current<0.04?1.6:(has_previous&&current<0.5*previous?1.9:2.2);return lambda*f;}
-int paperNoImprovementLimit(size_t n){return std::max(1,std::min(static_cast<int>(std::ceil(0.001*static_cast<double>(n))),100));}
+    namespace
+    {
+        double l1(const std::vector<double> &x, const std::vector<double> &y, const std::vector<size_t> &ids)
+        {
+            double v = 0;
+            for (auto i : ids)
+                v += std::abs(x[i]) + std::abs(y[i]);
+            return v;
+        }
 
 OptimizeResult optimizeLevel(Level &l,const Region&r,const DensityGrid&grid,const OptimizeConfig&cfg,GlobalOptimizeState&gs)
 {
