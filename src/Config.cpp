@@ -3,7 +3,6 @@
 #include <stdexcept>
 #include <sstream>
 #include <optional>
-#include <cmath>
 namespace placer
 {
     namespace
@@ -178,9 +177,6 @@ namespace placer
             throw std::runtime_error("--penalty-density must be in (0,1]");
         if (c.ofr_density && !(0.0 < *c.ofr_density && *c.ofr_density <= 1.0))
             throw std::runtime_error("--ofr-density must be in (0,1]");
-        if ((c.penalty_density && std::abs(*c.penalty_density-c.target_density)>1.0e-12) ||
-            (c.ofr_density && std::abs(*c.ofr_density-c.target_density)>1.0e-12))
-            throw std::runtime_error("paper_nonsmooth mode requires one shared target density for penalty and OFR");
         if (c.current <= 0 || c.cluster_degree_cap < 2)
             throw std::runtime_error("--current must be positive and --cluster-degree-cap >= 2");
         if (c.coarsen_ratio <= 1.0)

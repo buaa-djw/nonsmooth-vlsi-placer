@@ -23,7 +23,6 @@ namespace placer
     struct StageResult
     {
         int stage{}, iterations{}, best_iteration{};
-        double initial_hpwl{}, initial_density_penalty{}, initial_ofr{};
         double lambda{}, hpwl{}, density_penalty{}, objective{}, ofr{};
         std::string stop_reason;
     };
@@ -38,9 +37,8 @@ namespace placer
     struct GlobalOptimizeState { int iteration{}; std::chrono::steady_clock::time_point start_time{}; };
     struct OptimizeResult
     {
-        int level_index{};
         double initial_hpwl{}, initial_density_penalty{}, initial_ofr{};
-        double hpwl{}, density_penalty{}, ofr{}, lambda{};
+        double hpwl{}, density_penalty{}, ofr_report{}, lambda{};
         double wire_gradient_l1{}, density_gradient_l1{}, initial_lambda{};
         std::string stop_reason;
         std::vector<StageResult> stages;
