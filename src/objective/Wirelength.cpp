@@ -49,25 +49,31 @@ namespace placer
             size_t d = n.pins.size();
             if (d < 2)
                 continue;
-            if ((mode == WirelengthMode::PaperL1 || mode == WirelengthMode::B2B) && d <= 3)
+            if (mode == WirelengthMode::PaperL1 || mode == WirelengthMode::B2B)
             {
-                double w = d == 3 ? 0.5 : 1.0;
+                std::vector<double> xs(d), ys(d);
+                for(size_t i=0;i<d;++i){const auto&p=n.pins[i];const auto&o=l.objects[p.object_id];xs[i]=o.cx()+p.offset_x;ys[i]=o.cy()+p.offset_y;}
+                const auto [xmin,xmax]=std::minmax_element(xs.begin(),xs.end());
+                const auto [ymin,ymax]=std::minmax_element(ys.begin(),ys.end());
                 for (size_t i = 0; i < d; ++i)
                     for (size_t j = i + 1; j < d; ++j)
                     {
                         auto &a = n.pins[i];
                         auto &b = n.pins[j];
-                        double ax = l.objects[a.object_id].cx() + a.offset_x, ay = l.objects[a.object_id].cy() + a.offset_y;
-                        double bx = l.objects[b.object_id].cx() + b.offset_x, by = l.objects[b.object_id].cy() + b.offset_y;
+                        const double ax=xs[i],ay=ys[i],bx=xs[j],by=ys[j];
+                        const double base=d==2?1.0:1.0/static_cast<double>(d-1);
+                        const bool xi=d>3&&ax>*xmin&&ax<*xmax, xj=d>3&&bx>*xmin&&bx<*xmax;
+                        const bool yi=d>3&&ay>*ymin&&ay<*ymax, yj=d>3&&by>*ymin&&by<*ymax;
+                        const double wx=(xi&&xj)?0.0:base, wy=(yi&&yj)?0.0:base;
                         if (!l.objects[a.object_id].fixed)
                         {
-                            e.gx[a.object_id] += w * sx(ax - bx);
-                            e.gy[a.object_id] += w * sx(ay - by);
+                            e.gx[a.object_id] += wx * sx(ax - bx);
+                            e.gy[a.object_id] += wy * sx(ay - by);
                         }
                         if (!l.objects[b.object_id].fixed)
                         {
-                            e.gx[b.object_id] += w * sx(bx - ax);
-                            e.gy[b.object_id] += w * sx(by - ay);
+                            e.gx[b.object_id] += wx * sx(bx - ax);
+                            e.gy[b.object_id] += wy * sx(by - ay);
                         }
                     }
             }

@@ -2,6 +2,7 @@
 #include "placer/database/PlacementDB.hpp"
 #include <map>
 #include <optional>
+#include <limits>
 namespace placer
 {
     struct LObject
@@ -31,6 +32,8 @@ namespace placer
     {
         std::string name;
         std::vector<LPin> pins;
+        std::size_t original_net_id{std::numeric_limits<std::size_t>::max()};
+        std::string original_net_name;
     };
     struct Level
     {

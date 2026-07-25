@@ -49,6 +49,7 @@ int main(int argc, char **argv)
         std::vector<placer::InterlevelHpwl> ih;
         int adaptive_current = cfg.current;
         placer::GlobalOptimizeState global_state{0, t0};
+        int final_bx=1,final_by=1;
         for (int li = (int)levels.size() - 1; li >= 0; --li)
         {
             auto &lev = levels[(size_t)li];
@@ -64,7 +65,8 @@ int main(int argc, char **argv)
             placer::projectLevel(lev, region);
             int bx = cfg.bins_x.value_or(adaptive_current);
             int by = cfg.bins_y.value_or(adaptive_current);
-            placer::DensityGrid dg(region, bx, by, cfg.penalty_density.value_or(cfg.target_density), cfg.ofr_density.value_or(cfg.target_density));
+            if(li==0){final_bx=bx;final_by=by;}
+            placer::DensityGrid dg(region, bx, by, cfg.penalty_density.value_or(cfg.target_density), cfg.ofr_density.value_or(cfg.target_density),static_cast<unsigned>(cfg.seed));
             placer::OptimizeConfig oc;
             oc.mode = cfg.wirelength_mode;
             oc.iterations_per_stage = cfg.iterations_per_stage;
@@ -84,9 +86,16 @@ int main(int argc, char **argv)
             placer::writeLevelPl((cfg.out / ("level_" + std::to_string(lev.index) + "_final.pl")).string(), lev);
         }
         placer::writeFinalPl((cfg.out / "final.pl").string(), db, levels.front());
+        placer::DensityGrid final_grid(region,final_bx,final_by,cfg.target_density,cfg.target_density,static_cast<unsigned>(cfg.seed));
+        const auto db_level=placer::buildLevel0(db);const auto db_density=final_grid.evaluate(db_level);
+        auto reloaded_db=placer::loadBookshelf(cfg.aux.string());placer::parsePl((cfg.out/"final.pl").string(),reloaded_db);const auto reloaded_level=placer::buildLevel0(reloaded_db);const auto reloaded_density=final_grid.evaluate(reloaded_level);
+        placer::OutputConsistency consistency;consistency.solver_hpwl=sums.back().hpwl;consistency.db_hpwl=placer::exactHpwl(db_level);consistency.reloaded_hpwl=placer::exactHpwl(reloaded_level);consistency.solver_density_penalty=sums.back().density_penalty;consistency.db_density_penalty=db_density.penalty;consistency.reloaded_density_penalty=reloaded_density.penalty;consistency.solver_ofr=sums.back().ofr_report;consistency.db_ofr=db_density.paper_ofr;consistency.reloaded_ofr=reloaded_density.paper_ofr;
+        for(size_t i=0;i<db.cells.size();++i)consistency.max_coordinate_difference=std::max({consistency.max_coordinate_difference,std::abs(db.cells[i].x-reloaded_db.cells[i].x),std::abs(db.cells[i].y-reloaded_db.cells[i].y)});
+        auto close=[](double a,double b){return std::abs(a-b)<=1e-9*std::max({1.0,std::abs(a),std::abs(b)});};consistency.consistent=close(consistency.solver_hpwl,consistency.db_hpwl)&&close(consistency.db_hpwl,consistency.reloaded_hpwl)&&close(consistency.solver_density_penalty,consistency.db_density_penalty)&&close(consistency.db_density_penalty,consistency.reloaded_density_penalty)&&close(consistency.solver_ofr,consistency.db_ofr)&&close(consistency.db_ofr,consistency.reloaded_ofr)&&consistency.max_coordinate_difference<=1.0e-6+placer::EPS;
         placer::writeHistoryCsv(cfg.out / "history.csv", hist);
         placer::writeInterlevelJson(cfg.out / "interlevel_hpwl.json", ih);
-        placer::writeSummaryJson(cfg.out / "summary.json", sums, levels.front(), db, cfg);
+        placer::writeSummaryJson(cfg.out / "summary.json", sums, levels.front(), db, cfg,consistency);
+        if(!consistency.consistent)throw std::runtime_error("output round-trip consistency check failed");
         double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         placer::writeRunInfoJson(cfg.out / "run_info.json", cfg, elapsed);
         std::cout << "[done] " << (cfg.out / "final.pl").string() << std::endl;
