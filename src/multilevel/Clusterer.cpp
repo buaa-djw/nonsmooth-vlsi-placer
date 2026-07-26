@@ -5,50 +5,227 @@
 #include <iostream>
 #include <limits>
 #include <map>
-#include <numeric>
 #include <queue>
 #include <set>
 #include <stdexcept>
+#include <tuple>
 
 namespace placer
 {
-    namespace
+namespace
+{
+constexpr std::size_t INVALID_ID = std::numeric_limits<std::size_t>::max();
+
+struct Endpoint
+{
+    bool candidate_group{};
+    std::size_t id{};
+    bool operator<(const Endpoint &other) const { return std::tie(candidate_group, id) < std::tie(other.candidate_group, other.id); }
+};
+
+struct PairScore
+{
+    double score{};
+    std::size_t a{}, b{};
+};
+
+struct LowerPriority
+{
+    bool operator()(const PairScore &lhs, const PairScore &rhs) const
     {
-        struct PairScore { double neg_score; size_t a, b; bool operator<(const PairScore &o) const { if (neg_score != o.neg_score) return neg_score > o.neg_score; if (a != o.a) return a > o.a; return b > o.b; } };
-        double groupArea(const Level &l, const std::vector<size_t> &g){ double a=0; for(auto i:g) a += l.objects[i].area(); return a; }
-        std::pair<double,double> groupCenter(const Level &l, const std::vector<size_t> &g){ double a=groupArea(l,g), sx=0, sy=0; for(auto i:g){ double ar=l.objects[i].area(); sx+=ar*l.objects[i].cx(); sy+=ar*l.objects[i].cy(); } return {sx/std::max(EPS,a), sy/std::max(EPS,a)}; }
-        void groupConnectivity(const Level &level, const std::vector<size_t> &group_of, std::map<std::pair<size_t,size_t>,double> &conn, std::map<size_t,double> &ext)
-        {
-            for (const auto &net: level.nets){ std::vector<size_t> groups; std::set<size_t> seen; for(const auto&p:net.pins){ const auto&o=level.objects[p.object_id]; if(o.fixed||o.is_macro) continue; size_t g=group_of[p.object_id]; if(g!=std::numeric_limits<size_t>::max() && seen.insert(g).second) groups.push_back(g);} const size_t d=groups.size(); if(!d) continue; for(auto g:groups) ext[g]+=1.0; if(d<2) continue; const double w=1.0/static_cast<double>(d-1); for(size_t i=0;i<d;i++) for(size_t j=i+1;j<d;j++){ auto a=std::minmax(groups[i],groups[j]); conn[a]+=w; } }
+        if (lhs.score != rhs.score) return lhs.score < rhs.score;
+        if (lhs.a != rhs.a) return lhs.a > rhs.a;
+        return lhs.b > rhs.b;
+    }
+};
+
+double groupArea(const Level &level, const std::vector<std::size_t> &group)
+{
+    double area = 0.0;
+    for (const auto id : group) area += level.objects[id].area();
+    if (!(area > 0.0) || !std::isfinite(area)) throw std::runtime_error("cluster group has non-positive or non-finite area");
+    return area;
+}
+
+double scoreTerm(double degree, double internal, double area)
+{
+    if (!std::isfinite(degree) || !std::isfinite(internal) || !(internal > 0.0))
+        throw std::runtime_error("cluster connectivity is non-finite or non-positive");
+    // Eq. (19): a connection with no remaining external degree is completely
+    // internalizable and deterministically receives the highest priority.
+    const double denominator = degree - internal;
+    if (denominator <= EPS) return std::numeric_limits<double>::infinity();
+    const double value = internal / (denominator * area);
+    if (!std::isfinite(value)) throw std::runtime_error("cluster score is non-finite");
+    return value;
+}
+
+void groupConnectivity(const Level &level, const std::vector<std::size_t> &group_of,
+                       std::map<std::pair<std::size_t, std::size_t>, double> &connection,
+                       std::map<std::size_t, double> &external)
+{
+    for (const auto &net : level.nets) {
+        std::set<Endpoint> endpoints;
+        for (const auto &pin : net.pins) {
+            if (pin.object_id >= level.objects.size()) throw std::runtime_error("cluster pin object out of range in net " + net.name);
+            const auto &object = level.objects[pin.object_id];
+            if (!object.fixed && !object.is_macro) {
+                const auto group = group_of[pin.object_id];
+                if (group == INVALID_ID) throw std::runtime_error("movable standard object missing active group in net " + net.name);
+                endpoints.insert({true, group});
+            } else {
+                // Fixed objects and macros remain distinct hypergraph endpoints,
+                // even though they are not legal standard-cell merge candidates.
+                endpoints.insert({false, pin.object_id});
+            }
         }
-        std::tuple<std::map<size_t,std::pair<double,double>>,double,double> shelfPack(const Level&l,const std::vector<size_t>&children,double target_width){ auto ordered=children; std::sort(ordered.begin(),ordered.end(),[&](size_t a,size_t b){ const auto&A=l.objects[a], &B=l.objects[b]; if(A.height!=B.height) return A.height>B.height; if(A.width!=B.width) return A.width>B.width; return A.name<B.name;}); double x=0,y=0,rowh=0,bw=0,bh=0; std::map<size_t,std::pair<double,double>> placed; for(auto child:ordered){ const auto&o=l.objects[child]; if(x>EPS && x+o.width>target_width+EPS){ y+=rowh; x=0; rowh=0;} placed[child]={x+0.5*o.width,y+0.5*o.height}; x+=o.width; rowh=std::max(rowh,o.height); bw=std::max(bw,x); bh=std::max(bh,y+rowh);} for(auto &kv:placed){ kv.second.first-=0.5*bw; kv.second.second-=0.5*bh;} return {placed,std::max(bw,EPS),std::max(bh,EPS)}; }
-        std::tuple<std::map<size_t,std::pair<double,double>>,double,double> compactOffsets(const Level&l,const std::vector<size_t>&children){ if(children.size()==1){ auto&o=l.objects[children[0]]; return {{{children[0],{0,0}}},o.width,o.height}; } double area=0,maxw=0,sumw=0; for(auto i:children){ area+=l.objects[i].area(); maxw=std::max(maxw,l.objects[i].width); sumw+=l.objects[i].width;} double base=std::max(maxw,std::sqrt(std::max(area,EPS))); std::vector<double> cand={maxw,std::min(sumw,maxw+0.70*(base-maxw)),std::min(sumw,base),std::min(sumw,1.35*base),std::min(sumw,1.80*base)}; std::sort(cand.begin(),cand.end()); cand.erase(std::unique(cand.begin(),cand.end()),cand.end()); double best=std::numeric_limits<double>::infinity(), bw=0,bh=0; std::map<size_t,std::pair<double,double>> bo; for(double w:cand){ auto [off,pw,ph]=shelfPack(l,children,std::max(w,maxw)); double score=std::max(0.0,pw*ph-area)/std::max(area,EPS)+0.05*std::abs(std::log(std::max(pw,EPS)/std::max(ph,EPS))); if(score<best){best=score;bo=off;bw=pw;bh=ph;}} return {bo,bw,bh}; }
+        for (const auto &endpoint : endpoints) if (endpoint.candidate_group) external[endpoint.id] += 1.0;
+        if (endpoints.size() < 2) continue;
+        const double weight = 1.0 / static_cast<double>(endpoints.size() - 1);
+        std::vector<std::size_t> candidates;
+        for (const auto &endpoint : endpoints) if (endpoint.candidate_group) candidates.push_back(endpoint.id);
+        for (std::size_t i = 0; i < candidates.size(); ++i)
+            for (std::size_t j = i + 1; j < candidates.size(); ++j)
+                connection[std::minmax(candidates[i], candidates[j])] += weight;
     }
-    Level clusterOneLevel(const Level &fine, const ClusterConfig &cfg)
-    {
-        size_t target_movable = (size_t)std::max(1.0, std::ceil((double)fine.movableIds().size() / cfg.coarsen_ratio));
-        return clusterOneLevel(fine, target_movable, cfg.degree_cap);
-    }
-    Level clusterOneLevel(const Level &fine, size_t target_movable, int degree_cap)
-    {
-        auto std_ids=fine.standardMovableIds(); auto macro_ids=fine.macroIds(); size_t desired_std=std::max<size_t>(1, target_movable>macro_ids.size()?target_movable-macro_ids.size():1);
-        std::vector<std::vector<size_t>> groups; for(auto i:std_ids) groups.push_back({i});
-        (void)degree_cap; // Retained only for source compatibility; paper mode has no degree cap.
-        while(groups.size()>desired_std){
-          std::vector<size_t> group_of(fine.objects.size(),std::numeric_limits<size_t>::max());for(size_t g=0;g<groups.size();++g)for(auto oid:groups[g])group_of[oid]=g;
-          std::map<std::pair<size_t,size_t>,double> conn;std::map<size_t,double> ext;groupConnectivity(fine,group_of,conn,ext);
-          std::priority_queue<PairScore> pq;
-          for(const auto&kv:conn){const auto [a,b]=kv.first;const double dij=kv.second;const double score=dij/(std::max(EPS,ext[a]-dij)*std::max(EPS,groupArea(fine,groups[a])))+dij/(std::max(EPS,ext[b]-dij)*std::max(EPS,groupArea(fine,groups[b])));if(score>0.0)pq.push({-score,a,b});}
-          if(pq.empty())break; // Figure 2 permits nonpositive-score early termination.
-          const auto best=pq.top();auto merged=groups[best.a];merged.insert(merged.end(),groups[best.b].begin(),groups[best.b].end());
-          groups[best.a]=std::move(merged);groups.erase(groups.begin()+static_cast<std::ptrdiff_t>(best.b));
+}
+
+void validateHierarchyTransition(const Level &fine, const Level &coarse)
+{
+    if (!coarse.fine_to_coarse || coarse.fine_to_coarse->size() != fine.objects.size())
+        throw std::runtime_error("hierarchy transition has invalid fine_to_coarse size");
+    std::vector<unsigned> ownership(fine.objects.size(), 0U);
+    for (std::size_t parent = 0; parent < coarse.objects.size(); ++parent) {
+        const auto &object = coarse.objects[parent];
+        if (object.children.empty()) throw std::runtime_error("coarse object " + object.name + " has no children");
+        if (!(object.width > 0.0) || !(object.height > 0.0) || !std::isfinite(object.x) || !std::isfinite(object.y) ||
+            !std::isfinite(object.width) || !std::isfinite(object.height)) throw std::runtime_error("non-finite coarse geometry for " + object.name);
+        for (const auto child : object.children) {
+            if (child >= fine.objects.size() || ++ownership[child] != 1U || (*coarse.fine_to_coarse)[child] != parent)
+                throw std::runtime_error("invalid or duplicate hierarchy child in " + object.name);
+            if (fine.objects[child].fixed && !object.fixed) throw std::runtime_error("fixed child became movable in " + object.name);
+            if (fine.objects[child].is_macro && object.children.size() != 1) throw std::runtime_error("macro merged into cluster " + object.name);
         }
-        Level c; c.index=fine.index+1; c.fine_to_coarse=std::vector<size_t>(fine.objects.size(),std::numeric_limits<size_t>::max());
-        auto make=[&](const std::vector<size_t>&children,const std::string&name,bool is_macro,bool fixed){ LObject obj; double phys=0, aw=0,sx=0,sy=0; for(auto i:children){ double a=fine.objects[i].area(); phys+=a; aw+=a; sx+=a*fine.objects[i].cx(); sy+=a*fine.objects[i].cy(); obj.members.insert(obj.members.end(),fine.objects[i].members.begin(),fine.objects[i].members.end()); } obj.name=name; obj.fixed=fixed; obj.is_macro=is_macro; obj.children=children; if(fixed){ const auto&o=fine.objects[children[0]]; obj.width=o.width; obj.height=o.height; obj.x=o.x; obj.y=o.y; obj.child_offsets[children[0]]={0,0}; } else if(children.size()==1 && is_macro){ const auto&o=fine.objects[children[0]]; obj.width=o.width; obj.height=o.height; obj.child_offsets[children[0]]={0,0}; obj.setCenter(sx/std::max(aw,EPS),sy/std::max(aw,EPS)); } else { auto [offs,pw,ph]=compactOffsets(fine,children); obj.child_offsets=offs; double aspect=std::min(4.0,std::max(0.25,pw/std::max(ph,EPS))); obj.width=std::sqrt(std::max(phys,EPS)*aspect); obj.height=std::max(phys,EPS)/std::max(obj.width,EPS); obj.setCenter(sx/std::max(aw,EPS),sy/std::max(aw,EPS)); Region pb{1e100,-1e100,1e100,-1e100}; for(auto ch:children){ auto off=obj.child_offsets[ch]; const auto&o=fine.objects[ch]; pb.xl=std::min(pb.xl,off.first-0.5*o.width); pb.xh=std::max(pb.xh,off.first+0.5*o.width); pb.yl=std::min(pb.yl,off.second-0.5*o.height); pb.yh=std::max(pb.yh,off.second+0.5*o.height);} obj.projection_bbox=pb; } size_t oid=c.objects.size(); for(auto ch:children)(*c.fine_to_coarse)[ch]=oid; c.objects.push_back(obj); };
-        for(size_t k=0;k<groups.size();++k) make(groups[k],"cluster_L"+std::to_string(fine.index+1)+"_"+std::to_string(k),false,false); for(auto old:macro_ids) make({old},fine.objects[old].name,true,false); for(size_t old=0;old<fine.objects.size();++old) if(fine.objects[old].fixed) make({old},fine.objects[old].name,fine.objects[old].is_macro,true);
-        for(const auto&n:fine.nets){ LNet cn{n.name,{}}; cn.original_net_id=n.original_net_id; cn.original_net_name=n.original_net_name; std::set<size_t> seen; for(const auto&p:n.pins){ size_t cid=(*c.fine_to_coarse)[p.object_id]; if(cid>=c.objects.size()) throw std::runtime_error("invalid fine_to_coarse mapping"); if(!seen.insert(cid).second) continue; auto it=c.objects[cid].child_offsets.find(p.object_id); double dx=0,dy=0; if(it!=c.objects[cid].child_offsets.end()){dx=it->second.first; dy=it->second.second;} cn.pins.push_back({cid,dx+p.offset_x,dy+p.offset_y}); } std::sort(cn.pins.begin(),cn.pins.end(),[](const LPin&a,const LPin&b){return a.object_id<b.object_id;}); if(cn.pins.size()>=2) c.nets.push_back(cn); }
-        return c;
     }
-    std::vector<Level> buildHierarchy(const Level &l0, const ClusterConfig &cfg)
-    { std::vector<Level> hs{l0}; size_t threshold=(size_t)cfg.current*(size_t)cfg.current; while(hs.back().movableIds().size()>threshold && (int)hs.size()<cfg.max_levels){ const Level&fine=hs.back(); size_t n=fine.movableIds().size(); size_t target=std::max(threshold,(size_t)std::ceil((double)n/cfg.coarsen_ratio)); auto t0=std::chrono::steady_clock::now(); std::cout<<"[cluster L"<<fine.index<<"] movable="<<n<<" target="<<target<<std::endl; Level coarse=clusterOneLevel(fine,target,cfg.degree_cap); size_t cm=coarse.movableIds().size(); double el=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count(); std::cout<<"[cluster L"<<fine.index<<"] result movable="<<cm<<" objects="<<coarse.objects.size()<<" nets="<<coarse.nets.size()<<" elapsed="<<el<<std::endl; if(cm>=n){ std::cout<<"[cluster] no reduction; stopping hierarchy"<<std::endl; break;} hs.push_back(std::move(coarse)); } return hs; }
+    for (std::size_t child = 0; child < ownership.size(); ++child)
+        if (ownership[child] != 1U || (*coarse.fine_to_coarse)[child] >= coarse.objects.size()) throw std::runtime_error("fine object has no valid coarse owner");
+    std::set<std::size_t> net_ids;
+    for (const auto &net : coarse.nets) {
+        if (net.original_net_id == INVALID_ID) throw std::runtime_error("invalid original_net_id in coarse net " + net.name);
+        if (!net_ids.insert(net.original_net_id).second) throw std::runtime_error("duplicate original_net_id in coarse net " + net.name);
+        for (const auto &pin : net.pins) if (pin.object_id >= coarse.objects.size()) throw std::runtime_error("coarse pin object out of range in net " + net.name);
+    }
+}
+}
+
+Level clusterOneLevel(const Level &fine, const ClusterConfig &config)
+{
+    const auto target = static_cast<std::size_t>(std::max(1.0, std::ceil(static_cast<double>(fine.movableIds().size()) / config.coarsen_ratio)));
+    return clusterOneLevel(fine, target, config.degree_cap);
+}
+
+Level clusterOneLevel(const Level &fine, std::size_t target_movable, int degree_cap)
+{
+    const auto standard_ids = fine.standardMovableIds();
+    const auto macro_ids = fine.macroIds();
+    const std::size_t desired_standard = std::max<std::size_t>(1, target_movable > macro_ids.size() ? target_movable - macro_ids.size() : 1);
+    std::vector<std::vector<std::size_t>> groups;
+    for (const auto id : standard_ids) groups.push_back({id});
+    (void)degree_cap; // Compatibility option; the paper path does not cap degree.
+
+    while (groups.size() > desired_standard) {
+        std::vector<std::size_t> group_of(fine.objects.size(), INVALID_ID);
+        for (std::size_t group = 0; group < groups.size(); ++group) for (const auto id : groups[group]) group_of[id] = group;
+        std::map<std::pair<std::size_t, std::size_t>, double> connection;
+        std::map<std::size_t, double> external;
+        groupConnectivity(fine, group_of, connection, external);
+        std::priority_queue<PairScore, std::vector<PairScore>, LowerPriority> queue;
+        for (const auto &[pair, internal] : connection) {
+            const auto [a, b] = pair;
+            const double first = scoreTerm(external.at(a), internal, groupArea(fine, groups[a]));
+            const double second = scoreTerm(external.at(b), internal, groupArea(fine, groups[b]));
+            const double score = std::isinf(first) || std::isinf(second) ? std::numeric_limits<double>::infinity() : first + second;
+            if (score > 0.0) queue.push({score, a, b});
+        }
+        if (queue.empty()) break;
+        const auto best = queue.top();
+        groups[best.a].insert(groups[best.a].end(), groups[best.b].begin(), groups[best.b].end());
+        groups.erase(groups.begin() + static_cast<std::ptrdiff_t>(best.b));
+    }
+
+    Level coarse;
+    coarse.index = fine.index + 1;
+    coarse.fine_to_coarse = std::vector<std::size_t>(fine.objects.size(), INVALID_ID);
+    auto makeObject = [&](const std::vector<std::size_t> &children, const std::string &name, bool macro, bool fixed) {
+        LObject object;
+        object.name = name; object.fixed = fixed; object.is_macro = macro; object.children = children;
+        double area = 0.0, weighted_x = 0.0, weighted_y = 0.0, weighted_aspect = 0.0;
+        for (const auto child : children) {
+            const auto &fine_object = fine.objects[child];
+            const double child_area = fine_object.area();
+            if (!(child_area > 0.0) || !std::isfinite(child_area)) throw std::runtime_error("invalid child area for " + fine_object.name);
+            area += child_area; weighted_x += child_area * fine_object.cx(); weighted_y += child_area * fine_object.cy();
+            weighted_aspect += child_area * (fine_object.width / fine_object.height);
+            object.members.insert(object.members.end(), fine_object.members.begin(), fine_object.members.end());
+            object.child_offsets[child] = {0.0, 0.0};
+        }
+        if (fixed || (macro && children.size() == 1)) {
+            const auto &source = fine.objects[children.front()];
+            object.width = source.width; object.height = source.height; object.x = source.x; object.y = source.y;
+        } else {
+            // Paper mode represents physical area, not an artificial packed child layout.
+            const double aspect = std::clamp(weighted_aspect / area, 0.25, 4.0);
+            object.width = std::sqrt(area * aspect); object.height = area / object.width;
+            object.setCenter(weighted_x / area, weighted_y / area);
+        }
+        const auto parent = coarse.objects.size();
+        for (const auto child : children) (*coarse.fine_to_coarse)[child] = parent;
+        coarse.objects.push_back(std::move(object));
+    };
+    for (std::size_t i = 0; i < groups.size(); ++i) makeObject(groups[i], "cluster_L" + std::to_string(coarse.index) + "_" + std::to_string(i), false, false);
+    for (const auto id : macro_ids) makeObject({id}, fine.objects[id].name, true, false);
+    for (std::size_t id = 0; id < fine.objects.size(); ++id) if (fine.objects[id].fixed) makeObject({id}, fine.objects[id].name, fine.objects[id].is_macro, true);
+
+    std::set<std::size_t> original_ids;
+    for (const auto &net : fine.nets) {
+        if (net.original_net_id == INVALID_ID) throw std::runtime_error("invalid original_net_id in fine net " + net.name);
+        if (!original_ids.insert(net.original_net_id).second) throw std::runtime_error("duplicate original_net_id in fine net " + net.name + " id=" + std::to_string(net.original_net_id));
+        LNet coarse_net;
+        coarse_net.name = net.name;
+        coarse_net.original_net_id = net.original_net_id;
+        coarse_net.original_net_name = net.original_net_name;
+        std::set<std::size_t> endpoints;
+        for (const auto &pin : net.pins) {
+            if (pin.object_id >= fine.objects.size()) throw std::runtime_error("fine pin object out of range in net " + net.name);
+            const auto parent = (*coarse.fine_to_coarse)[pin.object_id];
+            if (parent >= coarse.objects.size()) throw std::runtime_error("invalid fine_to_coarse mapping in net " + net.name);
+            endpoints.insert(parent);
+        }
+        for (const auto parent : endpoints) coarse_net.pins.push_back({parent, 0.0, 0.0});
+        if (coarse_net.pins.size() >= 2) coarse.nets.push_back(std::move(coarse_net));
+    }
+    std::sort(coarse.nets.begin(), coarse.nets.end(), [](const LNet &a, const LNet &b) { return a.original_net_id < b.original_net_id; });
+    validateHierarchyTransition(fine, coarse);
+    return coarse;
+}
+
+std::vector<Level> buildHierarchy(const Level &level0, const ClusterConfig &config)
+{
+    std::vector<Level> hierarchy{level0};
+    const auto threshold = static_cast<std::size_t>(config.current) * static_cast<std::size_t>(config.current);
+    while (hierarchy.back().movableIds().size() > threshold && static_cast<int>(hierarchy.size()) < config.max_levels) {
+        const auto &fine = hierarchy.back();
+        const auto movable = fine.movableIds().size();
+        const auto target = std::max(threshold, static_cast<std::size_t>(std::ceil(static_cast<double>(movable) / config.coarsen_ratio)));
+        const auto start = std::chrono::steady_clock::now();
+        std::cout << "[cluster L" << fine.index << "] movable=" << movable << " target=" << target << '\n';
+        auto coarse = clusterOneLevel(fine, target, config.degree_cap);
+        const auto coarse_movable = coarse.movableIds().size();
+        const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        std::cout << "[cluster L" << fine.index << "] result movable=" << coarse_movable << " objects=" << coarse.objects.size() << " nets=" << coarse.nets.size() << " elapsed=" << elapsed << '\n';
+        if (coarse_movable >= movable) { std::cout << "[cluster] no reduction; stopping hierarchy\n"; break; }
+        hierarchy.push_back(std::move(coarse));
+    }
+    return hierarchy;
+}
 }

@@ -15,8 +15,9 @@ namespace placer
     struct InterlevelHpwl
     {
         double coarse_hpwl{}, fine_hpwl{}, delta{}, relative_delta{}, ratio{};
-        size_t coarse_nets{}, fine_nets{}, paired_nets{};
+        size_t coarse_nets{}, fine_nets{}, paired_nets{}, fine_only_nets{}, coarse_only_nets{};
         double sum_abs_net_delta{}, max_abs_net_delta{};
+        double internalized_fine_hpwl{}, coarse_only_hpwl{}, matched_coarse_hpwl{}, matched_fine_hpwl{};
     };
     [[nodiscard]] double netHpwl(const Level &, const LNet &);
     [[nodiscard]] double exactHpwl(const Level &);
