@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <set>
 #include <stdexcept>
 
@@ -174,8 +175,37 @@ InterlevelHpwl interlevelHpwlConsistency(const Level &coarse, const Level &fine)
 {
     InterlevelHpwl result; result.coarse_hpwl = exactHpwl(coarse); result.fine_hpwl = exactHpwl(fine); result.delta = result.fine_hpwl - result.coarse_hpwl;
     result.relative_delta = std::abs(result.delta) / std::max(EPS, std::abs(result.coarse_hpwl)); result.ratio = result.fine_hpwl / std::max(EPS, result.coarse_hpwl);
-    result.coarse_nets = coarse.nets.size(); result.fine_nets = fine.nets.size(); result.paired_nets = std::min(coarse.nets.size(), fine.nets.size());
-    for (std::size_t i = 0; i < result.paired_nets; ++i) { const double difference = std::abs(netHpwl(coarse, coarse.nets[i]) - netHpwl(fine, fine.nets[i])); result.sum_abs_net_delta += difference; result.max_abs_net_delta = std::max(result.max_abs_net_delta, difference); }
+    result.coarse_nets = coarse.nets.size(); result.fine_nets = fine.nets.size();
+    const auto index = [](const Level &level, const char *label) {
+        std::map<std::size_t, const LNet *> by_id;
+        for (const auto &net : level.nets) {
+            if (net.original_net_id == std::numeric_limits<std::size_t>::max())
+                throw std::runtime_error(std::string("invalid original_net_id in ") + label + " level " + std::to_string(level.index) + " net " + net.name);
+            if (!by_id.emplace(net.original_net_id, &net).second)
+                throw std::runtime_error(std::string("duplicate original_net_id in ") + label + " level " + std::to_string(level.index) + " net " + net.name + " id=" + std::to_string(net.original_net_id));
+        }
+        return by_id;
+    };
+    const auto coarse_by_id = index(coarse, "coarse");
+    const auto fine_by_id = index(fine, "fine");
+    for (const auto &[id, fine_net] : fine_by_id) {
+        const auto found = coarse_by_id.find(id);
+        if (found == coarse_by_id.end()) {
+            const double contribution = netHpwl(fine, *fine_net);
+            ++result.fine_only_nets; result.internalized_fine_hpwl += contribution;
+            result.sum_abs_net_delta += std::abs(contribution); result.max_abs_net_delta = std::max(result.max_abs_net_delta, std::abs(contribution));
+        } else {
+            const double coarse_value = netHpwl(coarse, *found->second), fine_value = netHpwl(fine, *fine_net);
+            ++result.paired_nets; result.matched_coarse_hpwl += coarse_value; result.matched_fine_hpwl += fine_value;
+            const double difference = std::abs(coarse_value - fine_value);
+            result.sum_abs_net_delta += difference; result.max_abs_net_delta = std::max(result.max_abs_net_delta, difference);
+        }
+    }
+    for (const auto &[id, coarse_net] : coarse_by_id) if (fine_by_id.find(id) == fine_by_id.end()) {
+        const double contribution = netHpwl(coarse, *coarse_net);
+        ++result.coarse_only_nets; result.coarse_only_hpwl += contribution;
+        result.sum_abs_net_delta += std::abs(contribution); result.max_abs_net_delta = std::max(result.max_abs_net_delta, std::abs(contribution));
+    }
     return result;
 }
 }
