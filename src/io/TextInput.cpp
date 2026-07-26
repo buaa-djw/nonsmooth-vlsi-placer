@@ -18,7 +18,8 @@ namespace placer
             int n = 0;
             while ((n = gzread(f, buf, sizeof(buf))) > 0)
                 out.append(buf, static_cast<std::size_t>(n));
-            gzclose(f);
+            if (n < 0) { int code = Z_OK; const char *message = gzerror(f, &code); const std::string detail = message ? message : "unknown zlib error"; gzclose(f); throw std::runtime_error("error reading " + path + ": " + detail); }
+            if (gzclose(f) != Z_OK) throw std::runtime_error("error closing gzip input " + path);
             return out;
         }
         std::ifstream in(path);

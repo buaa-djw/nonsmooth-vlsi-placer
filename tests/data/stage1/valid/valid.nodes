@@ -1,0 +1,7 @@
+UCLA nodes 1.0
+NumNodes : 4
+NumTerminals : 1
+terminal_cell 2 3 terminal_NI
+fixed_cell 1 1
+fixed_ni_cell 1 2
+movable_cell 2 1

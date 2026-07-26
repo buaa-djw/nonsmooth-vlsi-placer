@@ -182,6 +182,10 @@ namespace placer
             throw std::runtime_error("--penalty-density must be in (0,1]");
         if (c.ofr_density && !(0.0 < *c.ofr_density && *c.ofr_density <= 1.0))
             throw std::runtime_error("--ofr-density must be in (0,1]");
+        if (c.penalty_density && *c.penalty_density != c.target_density)
+            throw std::runtime_error("--penalty-density is deprecated in paper mode and must equal --target-density");
+        if (c.ofr_density && *c.ofr_density != c.target_density)
+            throw std::runtime_error("--ofr-density is deprecated in paper mode and must equal --target-density");
         if (c.current <= 0 || c.cluster_degree_cap < 2)
             throw std::runtime_error("--current must be positive and --cluster-degree-cap >= 2");
         if (c.coarsen_ratio <= 1.0)
@@ -192,6 +196,8 @@ namespace placer
             throw std::runtime_error("--hpwl-continuity-tol must be nonnegative");
         if (c.lambda_growth_low <= 0 || c.lambda_growth_mid <= 0 || c.lambda_growth_high <= 0)
             throw std::runtime_error("lambda growth factors must be positive");
+        if (c.s0 <= 0.0 || c.s_floor <= 0.0 || c.s_floor > c.s0)
+            throw std::runtime_error("--s0/--s-floor must be positive with floor <= s0");
         if (!(0.0 < c.quadratic_damping && c.quadratic_damping <= 1.0))
             throw std::runtime_error("--quadratic-damping must be in (0,1]");
         if (!(0.0 < c.wsa_min_fraction && c.wsa_min_fraction < 0.5))

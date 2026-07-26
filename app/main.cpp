@@ -66,7 +66,7 @@ int main(int argc, char **argv)
             int bx = cfg.bins_x.value_or(adaptive_current);
             int by = cfg.bins_y.value_or(adaptive_current);
             if(li==0){final_bx=bx;final_by=by;}
-            placer::DensityGrid dg(region, bx, by, cfg.penalty_density.value_or(cfg.target_density), cfg.ofr_density.value_or(cfg.target_density),static_cast<unsigned>(cfg.seed));
+            placer::DensityGrid dg(placer::DensityConfig{region, bx, by, cfg.target_density});
             placer::OptimizeConfig oc;
             oc.mode = cfg.wirelength_mode;
             oc.iterations_per_stage = cfg.iterations_per_stage;
@@ -77,6 +77,12 @@ int main(int argc, char **argv)
             oc.lambda0 = cfg.lambda0;
             oc.target_ofr = cfg.target_ofr;
             oc.report_every = cfg.report_every;
+            oc.s0 = cfg.s0;
+            oc.s_floor = cfg.s_floor;
+            oc.delta1 = cfg.lambda_growth_low;
+            oc.delta2 = cfg.lambda_growth_mid;
+            oc.delta3 = cfg.lambda_growth_high;
+            oc.wire_seed = static_cast<std::uint64_t>(cfg.seed);
             std::cout << "[optimize] L" << lev.index << " movable=" << lev.movableIds().size() << " bins=" << bx << "x" << by << std::endl;
             auto res = placer::optimizeLevel(lev, region, dg, oc, global_state);
             if (li > 0 && cfg.macro_shifting)
@@ -86,11 +92,11 @@ int main(int argc, char **argv)
             placer::writeLevelPl((cfg.out / ("level_" + std::to_string(lev.index) + "_final.pl")).string(), lev);
         }
         placer::writeFinalPl((cfg.out / "final.pl").string(), db, levels.front());
-        placer::DensityGrid final_grid(region,final_bx,final_by,cfg.target_density,cfg.target_density,static_cast<unsigned>(cfg.seed));
-        const auto db_level=placer::buildLevel0(db);const auto db_density=final_grid.evaluate(db_level);
+        placer::DensityGrid final_grid(placer::DensityConfig{region,final_bx,final_by,cfg.target_density});
+        const auto &db_level=levels.front();const auto db_density=final_grid.evaluate(db_level);
         auto reloaded_db=placer::loadBookshelf(cfg.aux.string());placer::parsePl((cfg.out/"final.pl").string(),reloaded_db);const auto reloaded_level=placer::buildLevel0(reloaded_db);const auto reloaded_density=final_grid.evaluate(reloaded_level);
         placer::OutputConsistency consistency;consistency.solver_hpwl=sums.back().hpwl;consistency.db_hpwl=placer::exactHpwl(db_level);consistency.reloaded_hpwl=placer::exactHpwl(reloaded_level);consistency.solver_density_penalty=sums.back().density_penalty;consistency.db_density_penalty=db_density.penalty;consistency.reloaded_density_penalty=reloaded_density.penalty;consistency.solver_ofr=sums.back().ofr_report;consistency.db_ofr=db_density.paper_ofr;consistency.reloaded_ofr=reloaded_density.paper_ofr;
-        for(size_t i=0;i<db.cells.size();++i)consistency.max_coordinate_difference=std::max({consistency.max_coordinate_difference,std::abs(db.cells[i].x-reloaded_db.cells[i].x),std::abs(db.cells[i].y-reloaded_db.cells[i].y)});
+        for(size_t i=0;i<db.cells.size();++i)consistency.max_coordinate_difference=std::max({consistency.max_coordinate_difference,std::abs(db_level.objects[i].x-reloaded_db.cells[i].x),std::abs(db_level.objects[i].y-reloaded_db.cells[i].y)});
         auto close=[](double a,double b){return std::abs(a-b)<=1e-9*std::max({1.0,std::abs(a),std::abs(b)});};consistency.consistent=close(consistency.solver_hpwl,consistency.db_hpwl)&&close(consistency.db_hpwl,consistency.reloaded_hpwl)&&close(consistency.solver_density_penalty,consistency.db_density_penalty)&&close(consistency.db_density_penalty,consistency.reloaded_density_penalty)&&close(consistency.solver_ofr,consistency.db_ofr)&&close(consistency.db_ofr,consistency.reloaded_ofr)&&consistency.max_coordinate_difference<=1.0e-6+placer::EPS;
         placer::writeHistoryCsv(cfg.out / "history.csv", hist);
         placer::writeInterlevelJson(cfg.out / "interlevel_hpwl.json", ih);
