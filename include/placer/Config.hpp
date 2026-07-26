@@ -38,8 +38,8 @@ namespace placer
         double lambda_growth_high{2.2};
         double lambda_growth_mid{1.9};
         double lambda_growth_low{1.6};
-        double s0{0.0};
-        double s_floor{0.0};
+        double s0{0.2};
+        double s_floor{0.06};
         double step_decay{200.0};
         double target_ofr{0.0};
         int report_every{10};

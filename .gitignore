@@ -13,8 +13,9 @@ results/
 # Benchmark datasets
 
 # C++ and CMake
-build/
-cmake-build-*/
+/build/
+/build-*/
+/cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
 compile_commands.json
@@ -28,3 +29,7 @@ compile_commands.json
 .idea/
 *.swp
 *.swo
+# Root CTest/Ninja metadata
+/Testing/
+/.ninja_deps
+/.ninja_log

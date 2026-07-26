@@ -1,6 +1,7 @@
 #pragma once
 #include "placer/Common.hpp"
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 namespace placer
@@ -32,6 +33,14 @@ namespace placer
         double y{}, height{}, x_start{}, x_end{}, site_width{}, site_spacing{};
         int num_sites{};
     };
+    struct BookshelfDeclaredCounts
+    {
+        std::optional<std::size_t> num_nodes;
+        std::optional<std::size_t> num_terminals;
+        std::optional<std::size_t> num_nets;
+        std::optional<std::size_t> num_pins;
+        std::optional<std::size_t> num_rows;
+    };
     struct PlacementDB
     {
         std::vector<Cell> cells;
@@ -39,9 +48,11 @@ namespace placer
         std::vector<Net> nets;
         std::vector<Row> rows;
         std::map<std::string, CellId> cell_name_to_id;
+        BookshelfDeclaredCounts declared_counts;
         CellId addCell(const std::string &, double, double, bool);
         NetId addNet(const std::string &);
         PinId addPin(CellId, NetId, double, double, const std::string &);
         [[nodiscard]] Region region() const;
+        void validate() const;
     };
 }

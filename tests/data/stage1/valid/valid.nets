@@ -1,0 +1,9 @@
+UCLA nets 1.0
+NumNets : 2
+NumPins : 4
+NetDegree : 3 signal
+terminal_cell O : 1.25 -2.5
+fixed_cell I : -0.75 0
+movable_cell B : 0 3.5
+NetDegree : 1 singleton
+fixed_ni_cell I : 0 0
